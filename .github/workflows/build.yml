@@ -237,7 +237,10 @@ jobs:
         run: |
           set -euo pipefail
           cd istoreos
-          make -j"$(nproc)" 2>&1 | tail -60 || { echo "并行构建失败，单线程重试"; make -j1 V=s 2>&1 | tail -120; }
+          if ! make -j"$(nproc)" 2>&1 | tee ../build.log; then
+            echo "::warning::并行构建失败，单线程重试（V=s）"
+            make -j1 V=s 2>&1 | tee -a ../build.log
+          fi
 
       - name: 收集产物
         run: |
