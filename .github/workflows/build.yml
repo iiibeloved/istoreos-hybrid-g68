@@ -82,6 +82,31 @@ jobs:
       - name: 静态自检
         run: sh scripts/selftest.sh istoreos 2>&1 | tee selftest.log
 
+      - name: defconfig 合理性检查
+        run: |
+          set -eu
+          cd istoreos
+          # 基线：iStoreOS 默认 defconfig
+          make defconfig >/dev/null 2>&1 || true
+          cp .config /tmp/default.config
+          # 应用我们的配置
+          cp ../configs/g68-hybrid.config .config
+          make defconfig >/dev/null 2>&1
+          cp .config /tmp/ours.config
+          echo "=== 关键符号（ours vs default）==="
+          for k in CONFIG_TARGET_ARCH_PACKAGES CONFIG_TARGET_BOARD CONFIG_TARGET_SUBTARGET \
+                   CONFIG_USE_MUSL CONFIG_TARGET_KERNEL_PARTSIZE CONFIG_TARGET_ROOTFS_PARTSIZE \
+                   CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus; do
+            printf '%-52s ours=%-28s default=%s\n' "$k" \
+              "$(grep -m1 "^$k=" /tmp/ours.config || echo -)" \
+              "$(grep -m1 "^$k=" /tmp/default.config || echo -)"
+          done
+          echo "=== 我们配置里被丢弃的符号（前 20）==="
+          sed -n 's/^\(CONFIG_[A-Za-z0-9_.-]*\)=.*/\1/p' ../configs/g68-hybrid.config | while read -r sym; do
+            grep -q "^$sym=" /tmp/ours.config || echo "  DROPPED $sym"
+          done | head -20
+          grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" /tmp/ours.config || { echo "::error::设备未选中"; exit 1; }
+
       - name: 上传自检报告
         uses: actions/upload-artifact@v4
         with:
@@ -122,6 +147,9 @@ jobs:
           make defconfig
           grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" .config || \
             { echo "::error::defconfig 未选中 G68 设备"; grep -E "TARGET_rockchip" .config | head; exit 1; }
+          make -j"$(nproc)" tools/install 2>&1 | tail -5
+          make -j"$(nproc)" toolchain/install 2>&1 | tail -10
+          ls -l staging_dir/toolchain-*/lib/ld-musl-*.so* | head -3
           make -j"$(nproc)" package/boot/uboot-rockchip/compile V=s 2>&1 | tail -40
 
       - name: 断言按键链路（strings + .config）
