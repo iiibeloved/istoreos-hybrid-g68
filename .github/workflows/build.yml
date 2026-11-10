@@ -1,0 +1,221 @@
+name: g68-hybrid-build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'device/**'
+      - 'configs/**'
+      - 'scripts/**'
+      - '.github/workflows/build.yml'
+  schedule:
+    - cron: '0 18 * * 6'      # 每周日 02:00 CST（UTC 周六 18:00）
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "构建阶段：uboot=只验证 u-boot 按键链路；full=全量固件"
+        type: choice
+        options: [ uboot, full ]
+        default: full
+      publish:
+        description: "是否发布 Release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  issues: write
+  actions: read
+
+env:
+  ISTOREOS_BRANCH: istoreos-24.10
+  ISTOREOS_URL: https://github.com/istoreos/istoreos.git
+
+jobs:
+  # ---------- 上游变更检查（定时/手动均可，push 时跳过）----------
+  check-upstream:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.c.outputs.commit }}
+      changed: ${{ steps.c.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: c
+        run: |
+          set -eu
+          C=$(git ls-remote "$ISTOREOS_URL" "refs/heads/$ISTOREOS_BRANCH" | awk '{print $1}')
+          echo "upstream commit: $C"
+          echo "commit=$C" >> "$GITHUB_OUTPUT"
+          OLD=$(sed -n 's/^commit=//p' upstream.lock | head -1)
+          if [ -n "$OLD" ] && [ "$OLD" = "$C" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "上游未变化，跳过构建"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------- 拉源码 + 应用设备层 + 静态自检 ----------
+  prepare:
+    needs: check-upstream
+    if: always() && (github.event_name == 'push' || needs.check-upstream.outputs.changed == 'true')
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.c.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 浅克隆 iStoreOS
+        run: |
+          set -eu
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          git -C istoreos rev-parse HEAD > upstream.commit
+          echo "commit=$(cat upstream.commit)" >> "$GITHUB_OUTPUT"
+        id: c
+
+      - name: 应用 G68 设备层
+        run: sh scripts/apply-device.sh istoreos 2>&1 | tee apply-device.log
+
+      - name: 静态自检
+        run: sh scripts/selftest.sh istoreos 2>&1 | tee selftest.log
+
+      - name: 上传自检报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-report
+          path: |
+            apply-device.log
+            selftest.log
+          if-no-files-found: warn
+
+  # ---------- u-boot 单独构建 + 按键链路断言 ----------
+  uboot-check:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 拉源码并应用设备层
+        run: |
+          set -eu
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          sh scripts/apply-device.sh istoreos >/dev/null
+          sh scripts/selftest.sh istoreos >/dev/null
+      - name: 安装依赖
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio
+
+      - name: 只编译 u-boot
+        run: |
+          set -eu
+          cd istoreos
+          make defconfig
+          scripts/config --file .config \
+            -e TARGET_rockchip -e TARGET_rockchip_armv8 \
+            -e TARGET_rockchip_armv8_DEVICE_nsy_g68-plus
+          make -j"$(nproc)" package/boot/uboot-rockchip/compile V=s 2>&1 | tail -40
+
+      - name: 断言按键链路（strings + .config）
+        run: |
+          set -eu
+          BIN=$(find istoreos/build_dir/target-*/linux-*/ -name 'u-boot-rockchip.bin' | head -1 || true)
+          [ -n "$BIN" ] || { echo "::error::未找到 u-boot-rockchip.bin"; find istoreos/build_dir -name 'u-boot*.bin' | head; exit 1; }
+          echo "u-boot-rockchip.bin: $BIN ($(stat -c%s "$BIN") 字节)"
+          for s in "download key pressed" "adc_channel_single_shot" "saradc"; do
+            if strings "$BIN" | grep -q "$s"; then echo "  [OK] $s"; else echo "::error::u-boot 缺少字符串: $s"; exit 1; fi
+          done
+          CFG=$(find istoreos/build_dir -path '*uboot*/.config' | head -1)
+          grep -E "^CONFIG_(ADC|SPL_ADC|SARADC_ROCKCHIP|ROCKCHIP_BOOT_MODE_REG)=" "$CFG" || true
+          grep -q "^CONFIG_ROCKCHIP_BOOT_MODE_REG=0xfdc20200" "$CFG" || { echo "::error::BOOT_MODE_REG 不等于 0xfdc20200"; exit 1; }
+          echo "u-boot 按键链路断言通过 ✅"
+
+  # ---------- 全量固件构建 ----------
+  build:
+    needs: [ prepare, uboot-check ]
+    if: always() && needs.prepare.result == 'success' && needs.uboot-check.result == 'success' && (inputs.stage == 'full' || github.event_name != 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 拉源码并应用设备层
+        run: |
+          set -eu
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          sh scripts/apply-device.sh istoreos
+          sh scripts/selftest.sh istoreos
+          cp configs/g68-hybrid.config istoreos/.config
+          cd istoreos
+          make defconfig 2>&1 | tail -20
+          echo "=== 关键配置确认 ==="
+          grep -E "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus|CONFIG_TARGET_KERNEL_PARTSIZE|CONFIG_TARGET_ROOTFS_PARTSIZE|CONFIG_PACKAGE_luci-app-store" .config || true
+
+      - name: 安装依赖
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio time
+
+      - name: 编译固件
+        run: |
+          set -o pipefail
+          cd istoreos
+          make -j"$(nproc)" 2>&1 | tail -60 || { echo "并行构建失败，单线程重试"; make -j1 V=s 2>&1 | tail -120; }
+
+      - name: 收集产物
+        run: |
+          set -eu
+          IMG=$(find istoreos/bin/targets/rockchip/armv8 -name '*nsy_g68-plus*sysupgrade.img.gz' | head -1)
+          [ -n "$IMG" ] || { echo "::error::未找到固件镜像"; ls -l istoreos/bin/targets/rockchip/armv8 2>/dev/null || true; exit 1; }
+          cp "$IMG" .
+          SHA=$(sha256sum "$(basename "$IMG")" | awk '{print $1}')
+          CNT=$(grep -c '^Package:' istoreos/bin/targets/rockchip/armv8/*.manifest 2>/dev/null || echo "?")
+          echo "IMG=$(basename "$IMG")" >> "$GITHUB_ENV"
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          echo "PKGCOUNT=$CNT" >> "$GITHUB_ENV"
+          [ -f "istoreos/bin/targets/rockchip/armv8/$(basename "$IMG" .gz).sha256" ] && cp "istoreos/bin/targets/rockchip/armv8/$(basename "$IMG" .gz).sha256" . || true
+          ls -lh "$(basename "$IMG")"
+
+      - name: 发布 Release
+        if: inputs.publish != false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          BASE="g68-hybrid-$(date -u +%Y.%m.%d)"
+          TAG="$BASE"; n=1
+          while gh release view "$TAG" >/dev/null 2>&1; do TAG="$BASE-r$n"; n=$((n+1)); done
+          {
+            echo "## NSY G68-PLUS (RK3568) · iStoreOS 24.10 杂交固件"
+            echo ""
+            echo "- 设备树/env: 取自 NSY G68 immortalwrt（含长按 Reset 进 MaskROM）"
+            echo "- 基座: iStoreOS \`$ISTOREOS_BRANCH\` @ \`$(sed -n 's/^commit=//p' upstream.lock)\`"
+            echo "- 包数: **${PKGCOUNT}** 个"
+            echo "- 镜像 sha256: \`${SHA}\`"
+            echo ""
+            echo "### 刷机（与 immortalwrt 完全一致）"
+            echo "1. USB 双公头线连接电脑与设备（OTG/靠网口 USB）"
+            echo "2. RKDevTool v3.18 + 驱动 v5.12"
+            echo "3. 断电 → **按住 Reset** 上电 → 松开 → 显示 MaskROM 设备"
+            echo "4. 高级功能 → Boot 选 \`rk356x_spl_loader_v1.21.113.bin\` → 下载"
+            echo "5. 获取当前存储 / **擦除所有**"
+            echo "6. 下载镜像（解压后的 .img）→ **勾选「强制按地址写」** → 执行"
+            echo ""
+            echo "> 若长按无效，可用短接触点法兜底（BROM 模式，loader 相同）"
+          } > notes.md
+          gh release create "$TAG" *.img.gz *.sha256 --title "G68 iStoreOS 杂交固件 $TAG" --notes-file notes.md || \
+            gh release upload "$TAG" *.img.gz *.sha256 --clobber
+
+      - name: 回写 upstream.lock
+        if: success() && inputs.publish != false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          printf 'branch=%s\ncommit=%s\n' "$ISTOREOS_BRANCH" "$(git -C istoreos rev-parse HEAD)" > upstream.lock
+          git add upstream.lock
+          git commit -m "chore: 记录已构建的 iStoreOS 上游 commit" || true
+          git push || true
+
+      - name: 失败时自动开 issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create --title "CI 构建失败: $GITHUB_RUN_NUMBER" \
+            --body "构建失败，日志：$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
