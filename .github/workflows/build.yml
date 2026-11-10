@@ -22,6 +22,10 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: g68-hybrid-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write
@@ -34,7 +38,6 @@ env:
 jobs:
   # ---------- 上游变更检查（定时/手动均可，push 时跳过）----------
   check-upstream:
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     outputs:
       commit: ${{ steps.c.outputs.commit }}
@@ -91,6 +94,7 @@ jobs:
   # ---------- u-boot 单独构建 + 按键链路断言 ----------
   uboot-check:
     needs: prepare
+    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
