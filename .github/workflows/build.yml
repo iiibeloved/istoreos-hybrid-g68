@@ -154,7 +154,7 @@ jobs:
           ls -l staging_dir/toolchain-*/lib/ld-musl-*.so* | head -3
           make -j"$(nproc)" package/boot/uboot-rockchip/compile V=s 2>&1 | tail -40
 
-      - name: 断言按键链路（overlay + .config + strings）
+      - name: 断言按键链路（overlay 源码 + .config + strings）
         shell: bash
         run: |
           set -uo pipefail
@@ -163,11 +163,26 @@ jobs:
           if [ -z "$BIN" ]; then echo "::error::未找到 G68 的 u-boot-rockchip.bin"; find istoreos/build_dir -maxdepth 3 -name 'u-boot-*' -type d | head; exit 1; fi
           echo "u-boot-rockchip.bin: $BIN ($(stat -c%s "$BIN") 字节)"
 
-          SRC=$(find istoreos/build_dir -path '*u-boot-2024.10/arch/arm/mach-rockchip/rk3568/rk3568.c' -path '*nsy-g68-plus*' | head -1)
-          if [ -n "$SRC" ]; then
-            echo "--- 构建树里的 rk3568.c ---"
-            echo "注入块出现次数: $(grep -c 'NSY-G68 long-press Reset' "$SRC")"
-            grep -n 'spl_board_init\|rockchip_dnl_key_pressed\|NSY_G68_DNL_ADC_CHAN' "$SRC" | head -6
+          FAIL=0
+
+          # --- 源码级：确认 overlay 已把 patch101 等价改动铺进构建树 ---
+          BM=$(find istoreos/build_dir -path '*u-boot-2024.10/arch/arm/mach-rockchip/boot_mode.c' -path '*nsy-g68-plus*' | head -1)
+          if [ -n "$BM" ]; then
+            echo "--- 构建树里的 boot_mode.c ($BM) ---"
+            grep -q 'rockchip_dnl_key_pressed' "$BM" \
+              && echo "  [OK] rockchip_dnl_key_pressed（按键检测）" \
+              || { echo "::error::boot_mode.c 缺少 rockchip_dnl_key_pressed，overlay 未生效"; FAIL=1; }
+            grep -q 'set_back_to_bootrom_dnl_flag' "$BM" \
+              && echo "  [OK] set_back_to_bootrom_dnl_flag（进 MaskROM 路径）" \
+              || { echo "::error::boot_mode.c 缺少 set_back_to_bootrom_dnl_flag，进 MaskROM 路径缺失"; FAIL=1; }
+          else
+            echo "::error::构建树中未找到 boot_mode.c"; FAIL=1
+          fi
+          RK=$(find istoreos/build_dir -path '*u-boot-2024.10/arch/arm/mach-rockchip/rk3568/rk3568.c' -path '*nsy-g68-plus*' | head -1)
+          if [ -n "$RK" ]; then
+            grep -q 'setup_boot_mode' "$RK" \
+              && echo "  [OK] rk3568.c spl_board_init → setup_boot_mode 调用链" \
+              || echo "::warning::rk3568.c 未见 setup_boot_mode 调用"
           else
             echo "::warning::构建树中未找到 rk3568.c"
           fi
@@ -177,7 +192,7 @@ jobs:
           echo "--- u-boot .config 关键项 ($CFG) ---"
           grep -E "^CONFIG_(DM|ADC|SPL_DM|SPL_ADC|SARADC_ROCKCHIP|CMD_ADC|ROCKCHIP_BOOT_MODE_REG)=" "$CFG" || echo "  (无匹配项)"
 
-          FAIL=0
+          # --- 二进制级：确认 SPL 段确实编进镜像 ---
           strings "$BIN" | grep -q "download key pressed" && echo "  [OK] download key pressed" || { echo "::error::缺少 download key pressed"; FAIL=1; }
           strings "$BIN" | grep -q "adc_channel_single_shot" && echo "  [OK] adc_channel_single_shot" || { echo "::error::缺少 adc_channel_single_shot（ADC 未启用）"; FAIL=1; }
           strings "$BIN" | grep -q "saradc" && echo "  [OK] saradc" || { echo "::warning::缺少 saradc 字符串"; }
