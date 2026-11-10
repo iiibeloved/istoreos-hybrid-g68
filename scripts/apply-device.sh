@@ -2,16 +2,18 @@
 # =============================================================================
 #  把 G68 (NSY G68-PLUS / RK3568) 设备层应用到 iStoreOS 源码树
 #
-#  设计原则（"要素化"，不用 .patch 文件）：
-#   - 纯新增文件：DTS / u-boot DTS+DTSI / defconfig  -> 直接放入对应 src/ 覆盖目录
-#   - 需要改动的上游文件（u-boot rk3568.c、arch/arm/dts/Makefile、
-#     uboot-rockchip/Makefile、image/armv8.mk）：构建前"现取上游原文 + 自动注入/追加"，
-#     带锚点检查与幂等标记；上游结构变化时明确报错，不静默出错。
+#  方案（不用 .patch，全部是文件覆盖/追加，保持干净）：
+#   - 纯新增文件：板级 DTS / DTSI / defconfig          -> uboot-rockchip/src/
+#   - 上游改动的文件（3 个）以"已验证的完整文件"覆盖：
+#       arch/arm/mach-rockchip/{Makefile,boot_mode.c}
+#       arch/arm/mach-rockchip/rk3568/rk3568.c
+#     这些文件 = u-boot 2024.10 上游 + immortalwrt 实机验证过的 patch 101 等价改动
+#       （boot_mode.o 编入 SPL、RK_DNL_ADC_CHAN=0、spl_board_init() 调 setup_boot_mode()）
+#   - arch/arm/dts/Makefile 同样覆盖（登记我们的 dtb）
+#   - 构建系统两处插入（幂等、带标记）：U-Boot 目标定义、镜像 Device 块
 #
-#  用法：
-#    apply-device.sh <iStoreOS源码根目录>
-#  环境：
-#    UBOOT_GIT_MIRROR  取上游 u-boot 单文件用的 raw 前缀（默认 gh 代理 + u-boot 官方）
+#  版本守卫：overlay 基准是 u-boot 2024.10；iStoreOS 升级 u-boot 时必须重新生成
+#            overlay，否则直接失败并提示，绝不带病构建。
 # =============================================================================
 set -eu
 
@@ -19,7 +21,6 @@ ROOT="${1:?用法: apply-device.sh <iStoreOS源码根目录>}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 DEV="$HERE/device"
 UB="$ROOT/package/boot/uboot-rockchip"
-RAW="${UBOOT_GIT_MIRROR:-https://raw.githubusercontent.com/u-boot/u-boot}"
 LOG="$HERE/apply-device.log"
 : > "$LOG"
 
@@ -27,69 +28,36 @@ say() { echo "[apply-device] $*" | tee -a "$LOG"; }
 die() { echo "[apply-device][FATAL] $*" | tee -a "$LOG" >&2; exit 1; }
 
 [ -d "$UB" ] || die "找不到 $UB（iStoreOS 源码根目录不对？）"
+[ -d "$DEV/uboot/overlay" ] || die "缺少 device/uboot/overlay"
 
-# ---------- 0) 读取 iStoreOS 的 u-boot 版本与来源 ----------
+# ---------- 0) 版本守卫 ----------
 UV=$(sed -n 's/^PKG_VERSION:=//p' "$UB/Makefile" | head -1)
 [ -n "$UV" ] || die "无法从 $UB/Makefile 读出 PKG_VERSION"
-SRC_PROTO=$(sed -n 's/^PKG_SOURCE_PROTO:=//p' "$UB/Makefile" | head -1)
-SRC_URL=$(sed -n 's/^PKG_SOURCE_URL:=//p' "$UB/Makefile" | head -1)
-SRC_VER=$(sed -n 's/^PKG_SOURCE_VERSION:=//p' "$UB/Makefile" | head -1)
-say "iStoreOS u-boot: version=$UV proto=${SRC_PROTO:-tarball} url=${SRC_URL:-denx} commit=${SRC_VER:-n/a}"
+BASE=$(cat "$DEV/uboot/OVERLAY_BASE" 2>/dev/null || echo "")
+[ "$UV" = "$BASE" ] || die "u-boot 版本不匹配：iStoreOS=$UV，overlay 基准=${BASE:-未定义}。
+  iStoreOS 升级了 u-boot，请按新版本重新生成 device/uboot/overlay：
+    - arch/arm/mach-rockchip/{Makefile,boot_mode.c}
+    - arch/arm/mach-rockchip/rk3568/rk3568.c
+    - arch/arm/dts/Makefile
+  生成方式：取 u-boot v$UV 原版，套用 immortalwrt 的
+  patches/101-rockchip-boot_mode-Allow-rockchip_dnl_key_pressed-in-SPL.patch 后保存。"
+say "u-boot 版本校验通过：$UV"
 
-TAG="v$UV"
-[ -n "$SRC_VER" ] && TAG=""
-say "u-boot 上游基准: ${SRC_URL:-https://source.denx.de/u-boot/u-boot} @ ${TAG:-$SRC_VER}"
+# ---------- 1) 覆盖层（含上游改动的 4 个文件）----------
+cp -a "$DEV/uboot/overlay/." "$UB/src/"
+say "overlay 已覆盖到 $UB/src/（Makefile / boot_mode.c / rk3568.c / dts/Makefile）"
 
-# ---------- 1) 纯新增文件 ----------
+# ---------- 2) 纯新增板级文件 ----------
 mkdir -p "$UB/src/arch/arm/dts" "$UB/src/configs" \
-         "$UB/src/arch/arm/mach-rockchip/rk3568" \
          "$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip"
-
-cp -f "$DEV/uboot/static/rk3568-nsy-g68-plus.dts"        "$UB/src/arch/arm/dts/"
+cp -f "$DEV/uboot/static/rk3568-nsy-g68-plus.dts"         "$UB/src/arch/arm/dts/"
 cp -f "$DEV/uboot/static/rk3568-nsy-g68-plus-u-boot.dtsi" "$UB/src/arch/arm/dts/"
 cp -f "$DEV/uboot/static/nsy-g68-plus-rk3568_defconfig"   "$UB/src/configs/"
 cp -f "$DEV/kernel-dts/rk3568-nsy-g68-plus.dts" \
       "$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/"
-say "静态设备文件已放置（u-boot dts/dtsi/defconfig + 内核 dts）"
+say "板级文件已放置（u-boot dts/dtsi/defconfig + 内核 dts）"
 
-# ---------- 2) 生成 u-boot rk3568.c（上游原文 + 注入块） ----------
-fetch_uboot_file() {  # $1=相对路径  $2=输出文件
-	url="${RAW}/${TAG}/$1"
-	[ -n "$TAG" ] || url="${RAW}/${SRC_VER}/$1"
-	if ! curl -fsSL --max-time 120 "$url" -o "$2"; then
-		die "取上游 u-boot 文件失败: $url"
-	fi
-	[ -s "$2" ] || die "上游文件为空: $url"
-}
-
-GEN="$HERE/.gen"; mkdir -p "$GEN"
-fetch_uboot_file "arch/arm/mach-rockchip/rk3568/rk3568.c" "$GEN/rk3568.c.upstream"
-grep -q "arch_cpu_init" "$GEN/rk3568.c.upstream" || die "上游 rk3568.c 锚点 arch_cpu_init 缺失（u-boot 结构大改）"
-
-if grep -q "spl_board_init" "$GEN/rk3568.c.upstream"; then
-	say "上游已含 spl_board_init()：仅注入通道覆盖（rockchip_dnl_key_pressed）"
-	BLOCK="$DEV/uboot/inject/rk3568-key-block.c"
-else
-	say "上游无 spl_board_init()：注入完整块（SPL 按键 + 通道覆盖）"
-	BLOCK="$DEV/uboot/inject/rk3568-key-block.c"
-fi
-
-cp -f "$GEN/rk3568.c.upstream" "$UB/src/arch/arm/mach-rockchip/rk3568/rk3568.c"
-cat "$BLOCK" >> "$UB/src/arch/arm/mach-rockchip/rk3568/rk3568.c"
-# 幂等：文件中注入标记必须恰好一组
-MARK=$(grep -c "NSY-G68 long-press Reset -> MaskROM: begin" "$UB/src/arch/arm/mach-rockchip/rk3568/rk3568.c" || true)
-[ "$MARK" = "1" ] || die "注入块数量异常: $MARK"
-say "rk3568.c 生成完成（上游 $(wc -l < "$GEN/rk3568.c.upstream") 行 + 注入块）"
-
-# ---------- 3) u-boot arch/arm/dts/Makefile：追加 dtb 行 ----------
-fetch_uboot_file "arch/arm/dts/Makefile" "$GEN/dts.Makefile.upstream"
-grep -q "dtb-\$(CONFIG_ROCKCHIP_RK" "$GEN/dts.Makefile.upstream" || die "上游 arch/arm/dts/Makefile 不存在 rockchip dtb 列表（结构变化）"
-cp -f "$GEN/dts.Makefile.upstream" "$UB/src/arch/arm/dts/Makefile"
-printf '\n# NSY-G68 (added by istoreos-hybrid-g68)\ndtb-$(CONFIG_ROCKCHIP_RK3568) += rk3568-nsy-g68-plus.dtb\n' \
-	>> "$UB/src/arch/arm/dts/Makefile"
-say "u-boot dts Makefile 已追加密钥 dtb 条目"
-
-# ---------- 4) uboot-rockchip/Makefile：插入 U-Boot/nsy-g68-plus 定义 + TARGETS ----------
+# ---------- 3) uboot-rockchip/Makefile：插入目标定义 + TARGETS ----------
 MK="$UB/Makefile"
 if ! grep -q "U-Boot/nsy-g68-plus-rk3568" "$MK"; then
 	awk '
@@ -107,9 +75,7 @@ if ! grep -q "U-Boot/nsy-g68-plus-rk3568" "$MK"; then
 	' "$MK" > "$MK.new" && mv "$MK.new" "$MK"
 	say "uboot-rockchip/Makefile: 已插入 U-Boot/nsy-g68-plus-rk3568"
 fi
-
 if ! sed -n '/^UBOOT_TARGETS/,/^$/p' "$MK" | grep -q "nsy-g68-plus-rk3568"; then
-	# 追加到 rk3568 目标列表（兼容不同写法：找首次出现的 rk3568 目标行后追加）
 	awk '
 		/^UBOOT_TARGETS/ { inlist=1 }
 		inlist && /-rk3568[ \t]*\\?$/ && !done {
@@ -117,13 +83,12 @@ if ! sed -n '/^UBOOT_TARGETS/,/^$/p' "$MK" | grep -q "nsy-g68-plus-rk3568"; then
 		}
 		{ print }
 	' "$MK" > "$MK.new2" && mv "$MK.new2" "$MK"
-	# 若没有匹配到，退化为在文件末尾（BuildPackage 之前）追加一行
-	if ! grep -q "nsy-g68-plus-rk3568 \\\\" "$MK"; then
-		die "UBOOT_TARGETS 中未能插入 nsy-g68-plus-rk3568，请检查 iStoreOS 的 Makefile 结构"
-	fi
+	sed -n '/^UBOOT_TARGETS/,/^$/p' "$MK" | grep -q "nsy-g68-plus-rk3568" \
+		|| die "UBOOT_TARGETS 插入失败（iStoreOS Makefile 结构变化）"
+	say "uboot-rockchip/Makefile: UBOOT_TARGETS 已加入 nsy-g68-plus-rk3568"
 fi
 
-# ---------- 5) image/armv8.mk：追加 Device 块 ----------
+# ---------- 4) image/armv8.mk：追加 Device 块 ----------
 IMG="$ROOT/target/linux/rockchip/image/armv8.mk"
 [ -f "$IMG" ] || die "找不到 $IMG"
 if ! grep -q "Device/nsy_g68-plus" "$IMG"; then
@@ -142,4 +107,4 @@ IMGBLOCK
 	say "image/armv8.mk: 已追加 Device/nsy_g68-plus"
 fi
 
-say "完成。u-boot 版本=$UV"
+say "完成（u-boot $UV，overlay 覆盖 + 板级文件 + 构建系统插入）"

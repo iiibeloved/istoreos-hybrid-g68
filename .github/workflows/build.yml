@@ -140,8 +140,9 @@ jobs:
           echo "feeds 安装完成"
 
       - name: 只编译 u-boot
+        shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           cd istoreos
           cp ../configs/g68-hybrid.config .config
           make defconfig
@@ -152,9 +153,10 @@ jobs:
           ls -l staging_dir/toolchain-*/lib/ld-musl-*.so* | head -3
           make -j"$(nproc)" package/boot/uboot-rockchip/compile V=s 2>&1 | tail -40
 
-      - name: 断言按键链路（源码注入 + .config + strings）
+      - name: 断言按键链路（overlay + .config + strings）
+        shell: bash
         run: |
-          set -u
+          set -uo pipefail
           BIN=$(find istoreos/build_dir -name 'u-boot-rockchip.bin' -path '*nsy-g68-plus*' | head -1 || true)
           [ -n "$BIN" ] || BIN=$(find istoreos/staging_dir -name 'nsy-g68-plus-rk3568-u-boot-rockchip.bin' | head -1 || true)
           if [ -z "$BIN" ]; then echo "::error::未找到 G68 的 u-boot-rockchip.bin"; find istoreos/build_dir -maxdepth 3 -name 'u-boot-*' -type d | head; exit 1; fi
@@ -215,8 +217,9 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio time
 
       - name: 编译固件
+        shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           cd istoreos
           make -j"$(nproc)" 2>&1 | tail -60 || { echo "并行构建失败，单线程重试"; make -j1 V=s 2>&1 | tail -120; }
 
