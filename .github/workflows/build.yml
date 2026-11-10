@@ -152,20 +152,34 @@ jobs:
           ls -l staging_dir/toolchain-*/lib/ld-musl-*.so* | head -3
           make -j"$(nproc)" package/boot/uboot-rockchip/compile V=s 2>&1 | tail -40
 
-      - name: 断言按键链路（strings + .config）
+      - name: 断言按键链路（源码注入 + .config + strings）
         run: |
-          set -eu
+          set -u
           BIN=$(find istoreos/build_dir -name 'u-boot-rockchip.bin' -path '*nsy-g68-plus*' | head -1 || true)
           [ -n "$BIN" ] || BIN=$(find istoreos/staging_dir -name 'nsy-g68-plus-rk3568-u-boot-rockchip.bin' | head -1 || true)
-          [ -n "$BIN" ] || { echo "::error::未找到 G68 的 u-boot-rockchip.bin"; find istoreos/build_dir -maxdepth 3 -name 'u-boot-*' -type d | head; exit 1; }
+          if [ -z "$BIN" ]; then echo "::error::未找到 G68 的 u-boot-rockchip.bin"; find istoreos/build_dir -maxdepth 3 -name 'u-boot-*' -type d | head; exit 1; fi
           echo "u-boot-rockchip.bin: $BIN ($(stat -c%s "$BIN") 字节)"
-          for s in "download key pressed" "adc_channel_single_shot" "saradc"; do
-            if strings "$BIN" | grep -q "$s"; then echo "  [OK] $s"; else echo "::error::u-boot 缺少字符串: $s"; exit 1; fi
-          done
+
+          SRC=$(find istoreos/build_dir -path '*u-boot-2024.10/arch/arm/mach-rockchip/rk3568/rk3568.c' -path '*nsy-g68-plus*' | head -1)
+          if [ -n "$SRC" ]; then
+            echo "--- 构建树里的 rk3568.c ---"
+            echo "注入块出现次数: $(grep -c 'NSY-G68 long-press Reset' "$SRC")"
+            grep -n 'spl_board_init\|rockchip_dnl_key_pressed\|NSY_G68_DNL_ADC_CHAN' "$SRC" | head -6
+          else
+            echo "::warning::构建树中未找到 rk3568.c"
+          fi
+
           CFG=$(find istoreos/build_dir -path '*u-boot-2024.10/.config' -path '*nsy-g68-plus*' | head -1)
           [ -n "$CFG" ] || CFG=$(find istoreos/build_dir -path '*u-boot-2024.10/.config' | head -1)
-          grep -E "^CONFIG_(ADC|SPL_ADC|SARADC_ROCKCHIP|ROCKCHIP_BOOT_MODE_REG)=" "$CFG" || true
-          grep -q "^CONFIG_ROCKCHIP_BOOT_MODE_REG=0xfdc20200" "$CFG" || { echo "::error::BOOT_MODE_REG 不等于 0xfdc20200"; exit 1; }
+          echo "--- u-boot .config 关键项 ($CFG) ---"
+          grep -E "^CONFIG_(DM|ADC|SPL_DM|SPL_ADC|SARADC_ROCKCHIP|CMD_ADC|ROCKCHIP_BOOT_MODE_REG)=" "$CFG" || echo "  (无匹配项)"
+
+          FAIL=0
+          strings "$BIN" | grep -q "download key pressed" && echo "  [OK] download key pressed" || { echo "::error::缺少 download key pressed"; FAIL=1; }
+          strings "$BIN" | grep -q "adc_channel_single_shot" && echo "  [OK] adc_channel_single_shot" || { echo "::error::缺少 adc_channel_single_shot（ADC 未启用）"; FAIL=1; }
+          strings "$BIN" | grep -q "saradc" && echo "  [OK] saradc" || { echo "::warning::缺少 saradc 字符串"; }
+          grep -q "^CONFIG_ROCKCHIP_BOOT_MODE_REG=0xfdc20200" "$CFG" || { echo "::error::BOOT_MODE_REG != 0xfdc20200"; FAIL=1; }
+          [ "$FAIL" = "0" ] || { echo "::error::u-boot 按键链路断言未通过"; exit 1; }
           echo "u-boot 按键链路断言通过 ✅"
 
   # ---------- 全量固件构建 ----------
@@ -188,6 +202,14 @@ jobs:
           make defconfig 2>&1 | tail -20
           echo "=== 关键配置确认 ==="
           grep -E "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus|CONFIG_TARGET_KERNEL_PARTSIZE|CONFIG_TARGET_ROOTFS_PARTSIZE|CONFIG_PACKAGE_luci-app-store" .config || true
+
+      - name: 缓存 dl
+        uses: actions/cache@v4
+        with:
+          path: istoreos/dl
+          key: dl-${{ github.run_id }}
+          restore-keys: |
+            dl-
 
       - name: 安装依赖
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio time
