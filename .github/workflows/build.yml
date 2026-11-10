@@ -155,13 +155,15 @@ jobs:
       - name: 断言按键链路（strings + .config）
         run: |
           set -eu
-          BIN=$(find istoreos/build_dir/target-*/linux-*/ -name 'u-boot-rockchip.bin' | head -1 || true)
-          [ -n "$BIN" ] || { echo "::error::未找到 u-boot-rockchip.bin"; find istoreos/build_dir -name 'u-boot*.bin' | head; exit 1; }
+          BIN=$(find istoreos/build_dir -name 'u-boot-rockchip.bin' -path '*nsy-g68-plus*' | head -1 || true)
+          [ -n "$BIN" ] || BIN=$(find istoreos/staging_dir -name 'nsy-g68-plus-rk3568-u-boot-rockchip.bin' | head -1 || true)
+          [ -n "$BIN" ] || { echo "::error::未找到 G68 的 u-boot-rockchip.bin"; find istoreos/build_dir -maxdepth 3 -name 'u-boot-*' -type d | head; exit 1; }
           echo "u-boot-rockchip.bin: $BIN ($(stat -c%s "$BIN") 字节)"
           for s in "download key pressed" "adc_channel_single_shot" "saradc"; do
             if strings "$BIN" | grep -q "$s"; then echo "  [OK] $s"; else echo "::error::u-boot 缺少字符串: $s"; exit 1; fi
           done
-          CFG=$(find istoreos/build_dir -path '*uboot*/.config' | head -1)
+          CFG=$(find istoreos/build_dir -path '*u-boot-2024.10/.config' -path '*nsy-g68-plus*' | head -1)
+          [ -n "$CFG" ] || CFG=$(find istoreos/build_dir -path '*u-boot-2024.10/.config' | head -1)
           grep -E "^CONFIG_(ADC|SPL_ADC|SARADC_ROCKCHIP|ROCKCHIP_BOOT_MODE_REG)=" "$CFG" || true
           grep -q "^CONFIG_ROCKCHIP_BOOT_MODE_REG=0xfdc20200" "$CFG" || { echo "::error::BOOT_MODE_REG 不等于 0xfdc20200"; exit 1; }
           echo "u-boot 按键链路断言通过 ✅"
