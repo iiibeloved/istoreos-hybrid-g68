@@ -9,7 +9,7 @@
 - 设备树 / u-boot 板级文件来自 NSY G68 实机验证过的配置
 - 基座为 iStoreOS **官方源**（`istoreos-24.10`），固件为**通用版**（不含任何自定义 uci-defaults / 开机脚本）
 - 上游 iStoreOS 有更新自动触发构建；否则每周日 02:00 CST 检查一次
-- 构建前自动自检（文件、注入块、defconfig、DTS、镜像定义），u-boot 单独编译并做 strings 断言，通过后才全量构建
+- 构建前自动自检（overlay、defconfig、DTS、镜像定义 + u-boot 版本守卫），u-boot 单独编译并做源码/strings 断言，通过后才全量构建
 
 ## 快速开始
 
@@ -24,9 +24,9 @@ gh workflow run build.yml -f stage=full -f publish=true
 ## 目录
 
 ```
-device/            设备层（内核 DTS / u-boot defconfig+dts / 按键注入块）
+device/            设备层（内核 DTS / u-boot defconfig+dts / 按键链路 overlay）
 scripts/
-  apply-device.sh  把设备层应用到 iStoreOS 源码（含生成式注入，幂等）
+  apply-device.sh  把设备层应用到 iStoreOS 源码（overlay 整文件覆盖，幂等）
   selftest.sh      构建前静态自检
 configs/           固件 defconfig
 docs/design.md     原理、差异、刷机、风险

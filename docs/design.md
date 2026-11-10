@@ -21,12 +21,13 @@
 | --- | --- | --- |
 | `ROCKCHIP_BOOT_MODE_REG` 默认 `0xfdc20200` | u-boot `arch/arm/mach-rockchip/rk3568/Kconfig` | 上游自带，无需配置 |
 | ADC 驱动默认开启 | u-boot `arch/arm/Kconfig`：`imply ADC` + `imply SARADC_ROCKCHIP` | 上游自带 |
-| **SPL 阶段读 ADC 通道 0 并触发复位** | 上游 `rk3568.c` 没有该逻辑 | 本仓库 `device/uboot/inject/` 注入 |
+| **SPL 阶段读 ADC 通道 0 并触发复位** | 上游需 patch 101 才能让 weak 按键检测在 SPL 生效 | 本仓库 `device/uboot/overlay/` 整文件覆盖（patch 101 等价） |
 
 immortalwrt 侧原实现是 patch 101（修改 `boot_mode.c` / `Makefile` / `rk3568.c`）。
-本仓库改为 **生成式注入**：构建前取上游原版 `rk3568.c`，在文件末尾追加
-`NSY-G68 long-press Reset -> MaskROM` 注入块（`spl_board_init()` + 通道 0 的
-`rockchip_dnl_key_pressed()` 覆盖）。不产生 `.patch` 文件，上游结构变化时自动检测锚点并报错。
+本仓库改为 **overlay 整文件覆盖**：`device/uboot/overlay/` 保存「u-boot 2024.10 上游
++ patch 101 等价改动」的完整文件，构建前 `cp -a` 覆盖进 u-boot 源码树。不产生 `.patch`
+文件；`OVERLAY_BASE` 锁定基准版本（2024.10），iStoreOS 升级 u-boot 时版本守卫直接
+判构建失败并提示重新生成 overlay，绝不带病构建。
 
 ## 2. 与 immortalwrt 的差异
 
@@ -34,7 +35,7 @@ immortalwrt 侧原实现是 patch 101（修改 `boot_mode.c` / `Makefile` / `rk3
 | --- | --- | --- |
 | 基座 | ImmortalWrt 24.10（fork） | iStoreOS `istoreos-24.10` |
 | 内核 | 6.6 | 6.6 |
-| u-boot | 2024.10 + patch 101 | 2024.10 + 生成式注入（无 patch 文件） |
+| u-boot | 2024.10 + patch 101 | 2024.10 + overlay（patch 101 等价改动，无 patch 文件） |
 | 镜像流程 | `pine64-img`（32 MiB 预留，rootfs_data 4096） | `pine64-img`（**16 MiB 预留**，rootfs_data 2048，`RESET000` 标记自动重置） |
 | 分区 | kernel 16M / rootfs 200M / rootfs_data 4096M | kernel 16M / rootfs 200M / **rootfs_data 2048M** |
 | 刷机 | 双公头 + RKDevTool + 长按 Reset + **强制按地址写** | **完全一致** |
@@ -50,15 +51,21 @@ device/
     │   ├── nsy-g68-plus-rk3568_defconfig        # 板级 u-boot defconfig
     │   ├── rk3568-nsy-g68-plus.dts              # u-boot 板级 DTS（&saradc okay / usb）
     │   └── rk3568-nsy-g68-plus-u-boot.dtsi      # u-boot dtsi（emmc 时序）
-    └── inject/rk3568-key-block.c                # 注入块（SPL 读键 → BROM 复位）
+    ├── overlay/                                # u-boot 2024.10 上游 + patch 101 等价改动（整文件覆盖）
+    │   └── arch/arm/mach-rockchip/
+    │       ├── boot_mode.c                     # SPL 读 SARADC 通道 0 → 写 BROM 下载标志（核心）
+    │       ├── rk3568/rk3568.c                 # spl_board_init → setup_boot_mode 调用链
+    │       └── Makefile、dts/Makefile           # 把板级 dtb / boot_mode.o 纳入构建
+    └── OVERLAY_BASE                            # overlay 基准版本（2024.10），版本守卫
 ```
 
 ## 4. 构建流程
 
 ```
 check-upstream（定时/手动）→ 比对 upstream.lock 与 iStoreOS 分支 HEAD
-prepare → clone iStoreOS → apply-device.sh（生成式注入）→ selftest.sh（静态断言）
-uboot-check → 只编 u-boot → strings 断言（download key pressed / adc_channel_single_shot / saradc）
+prepare → clone iStoreOS → apply-device.sh（overlay 覆盖）→ selftest.sh（静态断言）
+uboot-check → 只编 u-boot → 源码断言（boot_mode.c 含 rockchip_dnl_key_pressed / set_back_to_bootrom_dnl_flag）
+             + strings 断言（download key pressed / adc_channel_single_shot / saradc）
              + .config 断言（ROCKCHIP_BOOT_MODE_REG=0xfdc20200）
 build → 全量 make → 收集 img.gz + sha256 → Release（含刷机步骤）→ 回写 upstream.lock
 失败 → 自动开 issue
@@ -87,8 +94,8 @@ build → 全量 make → 收集 img.gz + sha256 → Release（含刷机步骤�
 
 | 风险 | 应对 |
 | --- | --- |
-| iStoreOS 升级 u-boot（2024.10 → 更新） | apply-device 自动取对应版本原文；锚点缺失时构建失败并提示 |
-| 上游合并同类按键逻辑 | 注入块仍可工作（weak 覆盖 + SPL 定义）；若出现重复定义，构建失败并提示改为仅通道覆盖 |
+| iStoreOS 升级 u-boot（2024.10 → 更新） | OVERLAY_BASE 版本守卫：版本不一致即构建失败，提示按新版本重新生成 overlay |
+| 上游合并同类按键逻辑 | overlay 为整文件覆盖，会掩盖上游同类改动；版本守卫在 u-boot 升级时强制人工核对并重新生成 overlay |
 | 内核 DTS 与 iStoreOS 6.6 不兼容 | 首次构建验证启动；必要时按 6.6 调整 DTS 属性 |
 | 应用包名与 immortalwrt 不同 | Phase 2 逐步映射（见下） |
 | 刷坏 | 长按 Reset 进 MaskROM 重刷即可（BROM 兜底，不会变砖） |
