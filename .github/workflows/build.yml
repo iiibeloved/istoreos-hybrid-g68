@@ -32,6 +32,7 @@ permissions:
   actions: read
 
 env:
+  TZ: Asia/Shanghai
   ISTOREOS_BRANCH: istoreos-24.10
   ISTOREOS_URL: https://github.com/istoreos/istoreos.git
 
