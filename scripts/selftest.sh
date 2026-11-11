@@ -35,7 +35,19 @@ echo
 [ "$FAIL" -gt 0 ] && { echo "自检失败：$FAIL 项"; exit 1; }
 echo "自检全部通过 ✅"
 
-echo "== 4. 自定义 files/ =="
-for f in usr/bin/bing-wallpaper usr/share/luci/menu.d/luci-app-bingwallpaper.json usr/share/rpcd/acl.d/luci-app-bingwallpaper.json www/luci-static/resources/view/bingwallpaper/bingwallpaper.js; do
-	[ -s "$ROOT/files/$f" ] && ok "files/$f" || bad "缺 files/$f"
-done
+echo "== 4. device/files 投递完整性 =="
+if [ -d "$DEV/files" ]; then
+	count=0
+	for f in $(cd "$DEV/files" && find . -type f | sed 's|^\./||'); do
+		count=$((count+1))
+		if cmp -s "$DEV/files/$f" "$ROOT/files/$f"; then
+			ok "files/$f"
+		else
+			bad "files/$f 未投递或内容不一致"
+		fi
+	done
+	[ "$count" -gt 0 ] || bad "device/files 为空"
+else
+	ok "device/files 不存在（跳过）"
+fi
+
