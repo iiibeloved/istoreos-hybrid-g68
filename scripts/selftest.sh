@@ -59,6 +59,8 @@ sed -n '/^UBOOT_TARGETS/,/^$/p' "$UB/Makefile" | grep -q "nsy-g68-plus-rk3568" &
 grep -q "define Device/nsy_g68-plus" "$IMG" && ok "Device/nsy_g68-plus" || bad "缺 Device/nsy_g68-plus"
 grep -q "TARGET_DEVICES += nsy_g68-plus" "$IMG" && ok "TARGET_DEVICES 注册" || bad "缺 TARGET_DEVICES"
 grep -q "UBOOT_DEVICE_NAME := nsy-g68-plus-rk3568" "$IMG" && ok "UBOOT_DEVICE_NAME" || bad "缺 UBOOT_DEVICE_NAME"
+grep -q 'ROOTFS_DATA_PARTSIZE:-4096' "$ROOT/scripts/gen_image_generic.sh" \
+	&& ok "rootfs_data 默认 4096 MiB" || bad "gen_image_generic.sh 未把 rootfs_data 设为 4096"
 
 echo
 [ "$FAIL" -gt 0 ] && { echo "自检失败：$FAIL 项"; exit 1; }

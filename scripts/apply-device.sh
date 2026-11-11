@@ -107,4 +107,18 @@ IMGBLOCK
 	say "image/armv8.mk: 已追加 Device/nsy_g68-plus"
 fi
 
-say "完成（u-boot $UV，overlay 覆盖 + 板级文件 + 构建系统插入）"
+# ---------- 5) scripts/gen_image_generic.sh：rootfs_data 默认 4096 MiB ----------
+# iStoreOS 把 USERDATASIZE 写死 2048；改为可用 ROOTFS_DATA_PARTSIZE 覆盖，默认 4096。
+# 注意：只影响 rootfs_data（可写 overlay）分区，rootfs 仍由 CONFIG_TARGET_ROOTFS_PARTSIZE 决定。
+GEN="$ROOT/scripts/gen_image_generic.sh"
+[ -f "$GEN" ] || die "找不到 $GEN"
+if ! grep -q 'ROOTFS_DATA_PARTSIZE' "$GEN"; then
+	sed -i 's/^USERDATASIZE="2048"$/USERDATASIZE="${ROOTFS_DATA_PARTSIZE:-4096}"/' "$GEN"
+	grep -q 'ROOTFS_DATA_PARTSIZE' "$GEN" \
+		|| die "gen_image_generic.sh 结构变化：未找到 USERDATASIZE=\"2048\"，请检查 iStoreOS 是否改了分区脚本"
+	say "gen_image_generic.sh: rootfs_data 默认 4096 MiB（ROOTFS_DATA_PARTSIZE 可覆盖）"
+else
+	say "gen_image_generic.sh: 已是可覆盖形式，跳过"
+fi
+
+say "完成（u-boot $UV，overlay 覆盖 + 板级文件 + 构建系统插入 + rootfs_data=4096）"

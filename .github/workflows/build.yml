@@ -248,6 +248,11 @@ jobs:
           IMG=$(find istoreos/bin/targets/rockchip/armv8 -name '*nsy_g68-plus*sysupgrade.img.gz' | head -1)
           [ -n "$IMG" ] || { echo "::error::未找到固件镜像"; ls -l istoreos/bin/targets/rockchip/armv8 2>/dev/null || true; exit 1; }
           cp "$IMG" .
+          # 断言 rootfs_data=4096MiB：镜像未压缩体积应 ≥ 4.2GiB（16+200+4096 MiB + 余量）
+          RAW=$(gzip -l "$IMG" | awk 'NR==2{print $2}')
+          echo "镜像未压缩大小: $RAW 字节（$((RAW/1024/1024)) MiB）"
+          [ "$RAW" -ge $((4200*1024*1024)) ] || \
+            { echo "::error::未压缩镜像仅 $((RAW/1024/1024)) MiB，rootfs_data 可能仍是 2048MiB"; exit 1; }
           SHA=$(sha256sum "$(basename "$IMG")" | awk '{print $1}')
           CNT=$(grep -c ' - ' istoreos/bin/targets/rockchip/armv8/*.manifest 2>/dev/null || echo "?")
           cp istoreos/bin/targets/rockchip/armv8/*.manifest ./packages.manifest
