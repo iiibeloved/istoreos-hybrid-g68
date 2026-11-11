@@ -1,8 +1,0 @@
-{
-	"admin/system/bingwallpaper": {
-		"title": "必应每日壁纸",
-		"order": 95,
-		"action": { "type": "view", "path": "bingwallpaper/bingwallpaper" },
-		"depends": { "acl": [ "luci-app-bingwallpaper" ] }
-	}
-}
