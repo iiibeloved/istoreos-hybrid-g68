@@ -80,3 +80,8 @@ CONFIG_SPL_DM=y
 CONFIG_SPL_ADC=y
 CONFIG_ADC=y
 CONFIG_SARADC_ROCKCHIP=y
+# 长按复位键进入 MaskROM 的 boot-mode 寄存器
+# 设备实测（运行中 immortalwrt 固件 u-boot 反汇编 + debugfs regmap）：
+#   PMU_GRF 基址 0xfdc20000 + 0x200 (OS_REG0) = 0xfdc20200
+#   写入 BROM magic = 0xEF08A53C (BOOT_BROM_DOWNLOAD)
+CONFIG_ROCKCHIP_BOOT_MODE_REG=0xfdc20200
