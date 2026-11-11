@@ -247,6 +247,9 @@ jobs:
             grep -q 'set_back_to_bootrom_dnl_flag' "$BM" \
               && echo "  [OK] set_back_to_bootrom_dnl_flag（进 MaskROM 路径）" \
               || { echo "::error::boot_mode.c 缺少 set_back_to_bootrom_dnl_flag，进 MaskROM 路径缺失"; FAIL=1; }
+            grep -q 'CONFIG_ROCKCHIP_BOOT_MODE_REG == 0' "$BM" \
+              && { echo "::error::boot_mode.c 仍含 '#if (CONFIG_ROCKCHIP_BOOT_MODE_REG == 0)' 空桩，复位键→MaskROM 静默失效"; FAIL=1; } \
+              || echo "  [OK] boot_mode.c 无 #if(==0) 空桩守卫"
           else
             echo "::error::构建树中未找到 boot_mode.c"; FAIL=1
           fi
