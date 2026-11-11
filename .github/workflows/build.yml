@@ -407,6 +407,12 @@ jobs:
         run: |
           set -euo pipefail
           sh scripts/verify-maskrom.sh istoreos --built
+
+  build:
+    needs: [ prepare, uboot-check ]
+    if: always() && needs.prepare.result == 'success' && needs.uboot-check.result == 'success' && (inputs.stage == 'full' || github.event_name != 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
       - name: 拉源码并应用设备层
 
         run: |
