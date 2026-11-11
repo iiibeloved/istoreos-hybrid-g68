@@ -14,6 +14,10 @@ name: g68-hybrid-package-guard
 # commit_result 默认开启：把注释结果回写 configs/，提交信息带 [skip ci]，
 # 不会再次触发全量构建。定时巡检（schedule）没有 inputs，只出报告不回写。
 
+# 注意：本工作流已取消定时触发。
+#  原因：它会提交 configs/ 变更，从而触发 build.yml（push paths 含 configs/**），
+#        与 build.yml 自身的周日 02:00 定时构建形成重复/竞争。
+#  包清单去重已内置在 build.yml 的 prepare 作业中；本工作流保留为手动「只出报告」工具。
 on:
   workflow_call:
     inputs:
@@ -37,8 +41,6 @@ on:
         description: 是否把注释结果回写 configs/
         type: boolean
         default: true
-  schedule:
-    - cron: '0 17 * * 6'      # 每周日 01:00 CST，早于 build.yml 的 02:00
 
 concurrency:
   group: g68-hybrid-package-guard-${{ github.ref }}
