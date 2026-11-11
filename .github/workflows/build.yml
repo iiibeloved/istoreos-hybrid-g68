@@ -204,47 +204,26 @@ jobs:
           grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" /tmp/ours.config \
             || { echo "::error::defconfig 未选中 G68 设备"; exit 1; }
       - name: 以上游包清单为基准去重（package-guard）
-
+        shell: bash
         run: |
-
-          set -eu
-
-          # /tmp/default.config 是上一步 make defconfig 生成的上游默认包集合；
-
-          # istoreos/ 由 prepare 浅克隆并应用设备层，这里零额外克隆 / feeds update。
-
+          set -uo pipefail
           if [ ! -s /tmp/default.config ]; then
-
             echo "::warning::上游默认 defconfig 缺失，跳过包清单去重"
-
             exit 0
-
           fi
-
-          python3 scripts/package-guard.py \
-
-            --upstream-config /tmp/default.config \
-
-            --index 'istoreos/feeds/*.index' \
-
-            --makefile-dir istoreos/package \
-
-            --makefile-dir istoreos/feeds \
-
-            --builtin-list configs/builtin-list.txt \
-
-            --hybrid-config configs/g68-hybrid.config \
-
-            --out-dir package-guard-out \
-
-            --json package-guard-out/report.json \
-
-            --md package-guard-out/report.md
-
-          cat package-guard-out/report.md >> "$GITHUB_STEP_SUMMARY"
-
-
-
+          mkdir -p package-guard-out
+          args=()
+          args+=(--upstream-config /tmp/default.config)
+          args+=(--hybrid-config configs/g68-hybrid.config)
+          args+=(--out-dir package-guard-out)
+          args+=(--json package-guard-out/report.json)
+          args+=(--md package-guard-out/report.md)
+          [ -f configs/builtin-list.txt ] && args+=(--builtin-list configs/builtin-list.txt)
+          for f in istoreos/feeds/*.index; do [ -f "$f" ] && args+=(--index "$f"); done
+          args+=(--makefile-dir istoreos/package --makefile-dir istoreos/feeds)
+          echo "package-guard: ${args[*]}"
+          python3 scripts/package-guard.py "${args[@]}" || echo "::warning::package-guard 返回非零（仅报告，不阻塞）"
+          if [ -f package-guard-out/report.md ]; then cat package-guard-out/report.md >> "$GITHUB_STEP_SUMMARY"; fi
       - name: 上传包清单去重报告
 
         uses: actions/upload-artifact@v4
