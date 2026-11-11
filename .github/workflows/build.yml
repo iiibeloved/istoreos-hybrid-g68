@@ -360,6 +360,12 @@ jobs:
 
         run: |
           set -euo pipefail
+          # GitHub Azure 运行器对 security.ubuntu.com 解析不稳定，切到 Azure 内网镜像
+          for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
+          [ -f "$f" ] || continue
+          sudo sed -i "s|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|http://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g" "$f" || true
+          done
+          sudo apt-get clean
           for i in 1 2 3; do
             if sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio; then
               echo "依赖安装成功（第 $i 次尝试）"; break
@@ -470,6 +476,12 @@ jobs:
 
         run: |
           set -euo pipefail
+          # GitHub Azure 运行器对 security.ubuntu.com 解析不稳定，切到 Azure 内网镜像
+          for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
+          [ -f "$f" ] || continue
+          sudo sed -i "s|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|http://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g" "$f" || true
+          done
+          sudo apt-get clean
           for i in 1 2 3; do
             if sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio; then
               echo "依赖安装成功（第 $i 次尝试）"; break
