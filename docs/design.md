@@ -103,5 +103,5 @@ build → 全量 make → 收集 img.gz + sha256 → Release（含刷机步骤�
 ## 7. 阶段计划
 
 - **Phase 1（今晚）**：最小可启动配置 → 验证 u-boot 按键链路（单编断言）→ 全量构建 → 出首版
-- **Phase 2**：把 immortalwrt 的 565 个包按 iStoreOS feed 名称映射补齐（dockerman、store、HA、EMQX 等）
+- **Phase 2**：把 immortalwrt 的 566 个包按 iStoreOS feed 名称映射补齐（dockerman、store、HA、EMQX 等）
 - **Phase 3**：实机刷入验证（网口/USB/PCIe/温度/key 刷机），出验收报告
