@@ -198,9 +198,11 @@ jobs:
           done
           echo "=== 被丢弃的符号（前 20）==="
           sed -n 's/^\(CONFIG_[A-Za-z0-9_.-]*\)=.*/\1/p' ../configs/g68-hybrid.config > /tmp/syms.txt
+          # 注意：不要写成 `done ... | head -20` —— pipefail 下 head 提前退出会让 echo 收到 EPIPE 而让整步失败
           while read -r sym; do
             grep -q "^$sym=" /tmp/ours.config || echo "  DROPPED $sym"
-          done < /tmp/syms.txt | head -20
+          done < /tmp/syms.txt > /tmp/dropped.txt 2>/dev/null || true
+          head -20 /tmp/dropped.txt || true
           grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" /tmp/ours.config \
             || { echo "::error::defconfig 未选中 G68 设备"; exit 1; }
       - name: 以上游包清单为基准去重（package-guard）
