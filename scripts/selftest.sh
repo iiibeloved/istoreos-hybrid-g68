@@ -27,6 +27,16 @@ grep -q "spl_board_init" "$UB/src/arch/arm/mach-rockchip/rk3568/rk3568.c" && ok 
 grep -q "obj-y += boot_mode.o" "$UB/src/arch/arm/mach-rockchip/Makefile" && ok "Makefile: boot_mode.o 编入 SPL" || bad "Makefile 未把 boot_mode.o 编入 SPL"
 grep -q "rk3568-nsy-g68-plus.dtb" "$UB/src/arch/arm/dts/Makefile" && ok "dts/Makefile: 登记 dtb" || bad "dts/Makefile 未登记 dtb"
 
+echo "== 2b. 复位键→MaskROM 守卫（不得架空）=="
+if grep -q "CONFIG_ROCKCHIP_BOOT_MODE_REG == 0" "$UB/src/arch/arm/mach-rockchip/boot_mode.c"; then
+	bad "boot_mode.c 仍含 '#if (CONFIG_ROCKCHIP_BOOT_MODE_REG == 0)' 空桩守卫（宏未设时=0，整段复位键→MaskROM 逻辑会被编译成空函数，静默失效）"
+else
+	ok "boot_mode.c: 已移除 '#if (==0)' 空桩守卫"
+fi
+grep -q "#ifndef CONFIG_ROCKCHIP_BOOT_MODE_REG" "$UB/src/arch/arm/mach-rockchip/boot_mode.c" \
+	&& ok "boot_mode.c: 含寄存器地址源码级兜底（#ifndef → 0xfdc20200，设备实测值）" \
+	|| bad "boot_mode.c 缺寄存器地址兜底（CONFIG_ROCKCHIP_BOOT_MODE_REG 未定义会编译失败）"
+
 echo "== 3. 板级文件 =="
 for f in "$UB/src/arch/arm/dts/rk3568-nsy-g68-plus.dts" \
          "$UB/src/arch/arm/dts/rk3568-nsy-g68-plus-u-boot.dtsi" \
@@ -41,6 +51,13 @@ for sym in "CONFIG_ROCKCHIP_RK3568=y" "CONFIG_ADC=y" "CONFIG_SARADC_ROCKCHIP=y" 
            "CONFIG_CMD_ADC=y" "CONFIG_SPL_ADC=y"; do
 	grep -q "^$sym" "$DEF" && ok "$sym" || bad "缺 $sym"
 done
+if grep -q "^CONFIG_ROCKCHIP_BOOT_MODE_REG=" "$DEF"; then
+	val=$(grep "^CONFIG_ROCKCHIP_BOOT_MODE_REG=" "$DEF" | cut -d= -f2)
+	[ "$val" = "0xfdc20200" ] && ok "defconfig: CONFIG_ROCKCHIP_BOOT_MODE_REG=$val (设备实测值)" \
+		|| bad "defconfig: CONFIG_ROCKCHIP_BOOT_MODE_REG=$val 但设备实测应为 0xfdc20200"
+else
+	bad "defconfig: 未显式设置 CONFIG_ROCKCHIP_BOOT_MODE_REG（应=0xfdc20200，设备实测）"
+fi
 grep -q '# CONFIG_OF_UPSTREAM is not set' "$DEF" && ok "OF_UPSTREAM 关闭（用 arch/arm/dts）" || bad "OF_UPSTREAM 未关闭"
 
 echo "== 5. u-boot DTS =="
