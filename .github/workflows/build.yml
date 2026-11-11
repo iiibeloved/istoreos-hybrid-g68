@@ -249,7 +249,7 @@ jobs:
           [ -n "$IMG" ] || { echo "::error::未找到固件镜像"; ls -l istoreos/bin/targets/rockchip/armv8 2>/dev/null || true; exit 1; }
           cp "$IMG" .
           SHA=$(sha256sum "$(basename "$IMG")" | awk '{print $1}')
-          CNT=$(grep -c '^Package:' istoreos/bin/targets/rockchip/armv8/*.manifest 2>/dev/null || echo "?")
+          CNT=$(grep -c ' - ' istoreos/bin/targets/rockchip/armv8/*.manifest 2>/dev/null || echo "?")
           cp istoreos/bin/targets/rockchip/armv8/*.manifest ./packages.manifest
           echo "IMG=$(basename "$IMG")" >> "$GITHUB_ENV"
           echo "SHA=$SHA" >> "$GITHUB_ENV"
@@ -297,12 +297,58 @@ jobs:
           printf 'branch=%s\ncommit=%s\n' "$ISTOREOS_BRANCH" "$(git -C istoreos rev-parse HEAD)" > upstream.lock
           git add upstream.lock
           git commit -m "chore: 记录已构建的 iStoreOS 上游 commit" || true
-          git push || true
+          git push || echo "::warning::upstream.lock 回写推送失败（检查 workflow 的 contents: write 权限）"
+          echo "---- upstream.lock ----"; cat upstream.lock
 
-      - name: 失败时自动开 issue
+      - name: 失败时自动开 issue（同类复用，不重复开）
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue create --title "CI 构建失败: $GITHUB_RUN_NUMBER" \
-            --body "构建失败，日志：$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
+          set -uo pipefail
+          TITLE="CI 构建失败: $GITHUB_RUN_NUMBER"
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          FAILED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+            --jq '[.jobs[].steps[] | select(.conclusion=="failure") | .name] | join(", ")' 2>/dev/null || echo "未知")
+          BODY=$(cat <<EOF
+          ## 构建失败
+
+          | 项目 | 值 |
+          | --- | --- |
+          | 运行 | [#$GITHUB_RUN_NUMBER]($RUN_URL) |
+          | 提交 | \`${GITHUB_SHA:0:8}\` |
+          | 触发方式 | ${GITHUB_EVENT_NAME} |
+          | 失败步骤 | ${FAILED} |
+
+          ### 排查
+
+          1. 打开 [运行日志]($RUN_URL)，展开失败步骤（编译步骤已 tee 全量日志到 build.log artifact）；
+          2. 修复后重新触发构建，成功时该 issue 会自动关闭。
+
+          > 同一根因的连续失败会追加评论到本 issue，不再重复新建。
+          EOF
+          )
+          EXISTING=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+            --jq '[.[] | select(.title | startswith("CI 构建失败")) | .number] | first // empty' 2>/dev/null || true)
+          if [ -n "${EXISTING:-}" ]; then
+            echo "已有未关闭的失败 issue #$EXISTING，追加评论"
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY" || true
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY" || true
+          fi
+
+      - name: 成功时自动关闭失败 issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          NUMS=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+            --jq '.[] | select(.title | startswith("CI 构建失败")) | .number' 2>/dev/null || true)
+          for n in $NUMS; do
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" \
+              --body "构建已通过（run #$GITHUB_RUN_NUMBER，提交 \`${GITHUB_SHA:0:8}\`），自动关闭。" || true
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" --reason completed || true
+            echo "已关闭 issue #$n"
+          done
+          [ -z "$NUMS" ] && echo "没有未关闭的失败 issue"
