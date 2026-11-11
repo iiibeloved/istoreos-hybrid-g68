@@ -8,18 +8,18 @@ appfilter
 attr
 autocore
 avahi-dbus-daemon
-base-files
+# base-files  # [package-guard] 上游默认已内置同名包，上游优先
 bash
 bc
-blkid
-block-mount
+# blkid  # [package-guard] 上游默认已内置同名包，上游优先
+# block-mount  # [package-guard] 上游默认已内置同名包，上游优先
 blockd
 bridge
 btrfs-progs
-busybox
+# busybox  # [package-guard] 上游默认已内置同名包，上游优先
 bzip2
-ca-bundle
-ca-certificates
+# ca-bundle  # [package-guard] 上游默认已内置同名包，上游优先
+# ca-certificates  # [package-guard] 本包 PROVIDES 与上游已占用名冲突
 cfdisk
 cgdisk
 cgi-io
@@ -42,13 +42,13 @@ ddns-scripts-services
 default-settings
 default-settings-chn
 dns2socks
-dnsmasq-full
+# dnsmasq-full  # [package-guard] 本包 PROVIDES 与上游已占用名冲突
 docker
 docker-compose
 dockerd
 dosfstools
-dropbear
-e2fsprogs
+# dropbear  # [package-guard] 上游默认已内置同名包，上游优先
+# e2fsprogs  # [package-guard] 上游默认已内置同名包，上游优先
 etherwake
 ethtool
 exfat-fsck
@@ -56,15 +56,15 @@ exfat-mkfs
 f2fs-tools
 f2fsck
 fdisk
-firewall4
-fstools
+# firewall4  # [package-guard] 上游默认已内置同名包，上游优先
+# fstools  # [package-guard] 上游默认已内置同名包，上游优先
 fuse-utils
-fwtool
+# fwtool  # [package-guard] 上游默认已内置同名包，上游优先
 gdisk
 geoview
-getrandom
+# getrandom  # [package-guard] 上游默认已内置同名包，上游优先
 haproxy
-hostapd-common
+# hostapd-common  # [package-guard] 上游默认已内置同名包，上游优先
 ip-full
 ip-tiny
 ip6tables-nft
@@ -72,44 +72,44 @@ ipt2socks
 iptables-mod-extra
 iptables-mod-filter
 iptables-nft
-iw-full
-iwinfo
+# iw-full  # [package-guard] 本包 PROVIDES 与上游已占用名冲突
+# iwinfo  # [package-guard] 上游默认已内置同名包，上游优先
 jansson4
-jshn
-jsonfilter
+# jshn  # [package-guard] 上游默认已内置同名包，上游优先
+# jsonfilter  # [package-guard] 上游默认已内置同名包，上游优先
 kernel
 kmod-asn1-decoder
 kmod-asn1-encoder
 kmod-br-netfilter
-kmod-cfg80211
+# kmod-cfg80211  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-acompress
-kmod-crypto-aead
+# kmod-crypto-aead  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-arc4
 kmod-crypto-blake2b
 kmod-crypto-cbc
-kmod-crypto-ccm
-kmod-crypto-cmac
+# kmod-crypto-ccm  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-cmac  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-crc32
-kmod-crypto-crc32c
-kmod-crypto-ctr
+# kmod-crypto-crc32c  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-ctr  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-cts
 kmod-crypto-des
 kmod-crypto-ecb
-kmod-crypto-gcm
-kmod-crypto-geniv
-kmod-crypto-gf128
-kmod-crypto-ghash
-kmod-crypto-hash
-kmod-crypto-hmac
-kmod-crypto-manager
+# kmod-crypto-gcm  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-geniv  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-gf128  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-ghash  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-hash  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-hmac  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-manager  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-md5
-kmod-crypto-null
-kmod-crypto-rng
-kmod-crypto-seqiv
+# kmod-crypto-null  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-rng  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-seqiv  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-sha1
 kmod-crypto-sha256
-kmod-crypto-sha3
-kmod-crypto-sha512
+# kmod-crypto-sha3  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-crypto-sha512  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-crypto-user
 kmod-crypto-xxhash
 kmod-dax
@@ -136,7 +136,7 @@ kmod-fs-smbfs-common
 kmod-fs-vfat
 kmod-fs-xfs
 kmod-fuse
-kmod-gpio-button-hotplug
+# kmod-gpio-button-hotplug  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-hwmon-core
 kmod-ifb
 kmod-inet-diag
@@ -151,9 +151,9 @@ kmod-ipt-physdev
 kmod-keys-encrypted
 kmod-keys-trusted
 kmod-leds-gpio
-kmod-lib-crc-ccitt
+# kmod-lib-crc-ccitt  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-lib-crc16
-kmod-lib-crc32c
+# kmod-lib-crc32c  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-lib-lzo
 kmod-lib-raid6
 kmod-lib-textsearch
@@ -164,7 +164,7 @@ kmod-lib-zlib-inflate
 kmod-lib-zstd
 kmod-libphy
 kmod-loop
-kmod-mac80211
+# kmod-mac80211  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-macvlan
 kmod-md-mod
 kmod-md-raid0
@@ -177,33 +177,33 @@ kmod-mt76-core
 kmod-mt7915e
 kmod-mt7916-firmware
 kmod-netlink-diag
-kmod-nf-conntrack
+# kmod-nf-conntrack  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nf-conntrack-netlink
-kmod-nf-conntrack6
-kmod-nf-flow
+# kmod-nf-conntrack6  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-nf-flow  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nf-ipt
 kmod-nf-ipt6
 kmod-nf-ipvs
-kmod-nf-log
-kmod-nf-log6
-kmod-nf-nat
+# kmod-nf-log  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-nf-log6  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-nf-nat  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nf-nat6
 kmod-nf-nathelper
 kmod-nf-nathelper-extra
-kmod-nf-reject
-kmod-nf-reject6
+# kmod-nf-reject  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-nf-reject6  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nf-socket
 kmod-nf-tproxy
-kmod-nfnetlink
+# kmod-nfnetlink  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nft-compat
-kmod-nft-core
-kmod-nft-fib
+# kmod-nft-core  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-nft-fib  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nft-fullcone
-kmod-nft-nat
-kmod-nft-offload
+# kmod-nft-nat  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-nft-offload  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nft-socket
 kmod-nft-tproxy
-kmod-nls-base
+# kmod-nls-base  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-nls-cp437
 kmod-nls-cp932
 kmod-nls-cp936
@@ -214,20 +214,20 @@ kmod-nls-utf8
 kmod-nvme
 kmod-oaf
 kmod-oid-registry
-kmod-ppp
-kmod-pppoe
-kmod-pppox
-kmod-random-core
+# kmod-ppp  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-pppoe  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-pppox  # [package-guard] 上游默认已内置同名包，上游优先
+# kmod-random-core  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-sched-core
 kmod-scsi-core
-kmod-slhc
+# kmod-slhc  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-swconfig
 kmod-switch-rtl8366-smi
 kmod-switch-rtl8367b
 kmod-thermal
 kmod-tpm
 kmod-tun
-kmod-usb-core
+# kmod-usb-core  # [package-guard] 上游默认已内置同名包，上游优先
 kmod-usb-storage
 kmod-usb-storage-extras
 kmod-usb-storage-uas
@@ -242,7 +242,7 @@ libblkid1
 libblobmsg-json20240329
 libbpf1
 libbz2-1.0
-libc
+# libc  # [package-guard] 上游默认已内置同名包，上游优先
 libcap
 libcap-ng
 libcomerr0
@@ -265,7 +265,7 @@ libinih
 libiptext-nft0
 libiptext0
 libiptext6-0
-libiwinfo-data
+# libiwinfo-data  # [package-guard] 上游默认已内置同名包，上游优先
 libiwinfo20230701
 libjson-c5
 libjson-script20240329
@@ -301,9 +301,9 @@ libopenssl3
 libparted
 libpcre2
 libpopt0
-libpthread
+# libpthread  # [package-guard] 上游默认已内置同名包，上游优先
 libreadline8
-librt
+# librt  # [package-guard] 上游默认已内置同名包，上游优先
 libruby3.3
 libseccomp
 libsmartcols1
@@ -318,7 +318,7 @@ libuci-lua
 libuci20250120
 libuclient20201210
 libucode20230711
-libudebug
+# libudebug  # [package-guard] 上游默认已内置同名包，上游优先
 liburcu
 liburing
 libustream-openssl20201210
@@ -329,7 +329,7 @@ libwrap
 libxtables12
 libyaml
 libzstd
-logd
+# logd  # [package-guard] 上游默认已内置同名包，上游优先
 losetup
 lsblk
 lua
@@ -429,34 +429,34 @@ mdadm
 microsocks
 miniupnpd-nftables
 mkf2fs
-mount-utils
-mtd
+# mount-utils  # [package-guard] 上游默认已内置同名包，上游优先
+# mtd  # [package-guard] 上游默认已内置同名包，上游优先
 netdata
-netifd
+# netifd  # [package-guard] 上游默认已内置同名包，上游优先
 nfs-kernel-server
 nfs-kernel-server-utils
 nfs-utils
 nfs-utils-libs
-nftables-json
+# nftables-json  # [package-guard] 上游默认已内置同名包，上游优先
 nlbwmon
 ntfs3-mount
 nvme-cli
-odhcp6c
-odhcpd-ipv6only
+# odhcp6c  # [package-guard] 上游默认已内置同名包，上游优先
+# odhcpd-ipv6only  # [package-guard] 上游默认已内置同名包，上游优先
 openssl-util
-openwrt-keyring
-opkg
+# openwrt-keyring  # [package-guard] 上游默认已内置同名包，上游优先
+# opkg  # [package-guard] 上游默认已内置同名包，上游优先
 parted
 partx-utils
-ppp
-ppp-mod-pppoe
-procd
-procd-seccomp
-procd-ujail
+# ppp  # [package-guard] 上游默认已内置同名包，上游优先
+# ppp-mod-pppoe  # [package-guard] 上游默认已内置同名包，上游优先
+# procd  # [package-guard] 上游默认已内置同名包，上游优先
+# procd-seccomp  # [package-guard] 上游默认已内置同名包，上游优先
+# procd-ujail  # [package-guard] 上游默认已内置同名包，上游优先
 protobuf
 protobuf-lite
 quickstart
-resize2fs
+# resize2fs  # [package-guard] 上游默认已内置同名包，上游优先
 resolveip
 rpcbind
 rpcd
@@ -523,7 +523,7 @@ sing-box
 smartd
 smartmontools
 smartmontools-drivedb
-swconfig
+# swconfig  # [package-guard] 上游默认已内置同名包，上游优先
 tar
 taskd
 tc-tiny
@@ -531,35 +531,35 @@ tcping
 terminfo
 tini
 ttyd
-uboot-envtools
-ubox
-ubus
-ubusd
-uci
-uclient-fetch
-ucode
+# uboot-envtools  # [package-guard] 上游默认已内置同名包，上游优先
+# ubox  # [package-guard] 上游默认已内置同名包，上游优先
+# ubus  # [package-guard] 上游默认已内置同名包，上游优先
+# ubusd  # [package-guard] 上游默认已内置同名包，上游优先
+# uci  # [package-guard] 上游默认已内置同名包，上游优先
+# uclient-fetch  # [package-guard] 上游默认已内置同名包，上游优先
+# ucode  # [package-guard] 上游默认已内置同名包，上游优先
 ucode-mod-digest
-ucode-mod-fs
+# ucode-mod-fs  # [package-guard] 上游默认已内置同名包，上游优先
 ucode-mod-html
 ucode-mod-lua
 ucode-mod-math
-ucode-mod-nl80211
-ucode-mod-rtnl
-ucode-mod-ubus
-ucode-mod-uci
-ucode-mod-uloop
+# ucode-mod-nl80211  # [package-guard] 上游默认已内置同名包，上游优先
+# ucode-mod-rtnl  # [package-guard] 上游默认已内置同名包，上游优先
+# ucode-mod-ubus  # [package-guard] 上游默认已内置同名包，上游优先
+# ucode-mod-uci  # [package-guard] 上游默认已内置同名包，上游优先
+# ucode-mod-uloop  # [package-guard] 上游默认已内置同名包，上游优先
 uhttpd
 uhttpd-mod-ubus
 unishare
 unzip
-urandom-seed
-urngd
-usign
+# urandom-seed  # [package-guard] 上游默认已内置同名包，上游优先
+# urngd  # [package-guard] 上游默认已内置同名包，上游优先
+# usign  # [package-guard] 上游默认已内置同名包，上游优先
 v2ray-plugin
 webdav2
 wget-ssl
-wifi-scripts
-wireless-regdb
+# wifi-scripts  # [package-guard] 上游默认已内置同名包，上游优先
+# wireless-regdb  # [package-guard] 上游默认已内置同名包，上游优先
 wireless-tools
 wpad-openssl
 wsdd2
