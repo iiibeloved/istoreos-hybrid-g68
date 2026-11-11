@@ -57,6 +57,19 @@ cp -f "$DEV/kernel-dts/rk3568-nsy-g68-plus.dts" \
       "$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/"
 say "板级文件已放置（u-boot dts/dtsi/defconfig + 内核 dts）"
 
+# ---------- 2.5) 内核补丁（XPCS / SGMII 2.5G / combphy sgmii-mac-sel）----------
+#   我们的 DTS 用了 &xpcs、rockchip,sgmii-mac-sel，这些在 iStoreOS 6.6 上没有，
+#   需要把 immortalwrt 验证过的 4 个内核补丁带过来。
+if [ -d "$DEV/kernel-patches" ]; then
+	mkdir -p "$ROOT/target/linux/rockchip/patches-6.6"
+	for pf in "$DEV/kernel-patches"/*.patch; do
+		[ -f "$pf" ] || continue
+		base=$(basename "$pf")
+		cp -f "$pf" "$ROOT/target/linux/rockchip/patches-6.6/$base"
+	done
+	say "内核补丁已放置: $(ls "$DEV/kernel-patches" | tr '\n' ' ')"
+fi
+
 # ---------- 3) uboot-rockchip/Makefile：插入目标定义 + TARGETS ----------
 MK="$UB/Makefile"
 if ! grep -q "U-Boot/nsy-g68-plus-rk3568" "$MK"; then
@@ -107,18 +120,4 @@ IMGBLOCK
 	say "image/armv8.mk: 已追加 Device/nsy_g68-plus"
 fi
 
-# ---------- 5) scripts/gen_image_generic.sh：rootfs_data 默认 4096 MiB ----------
-# iStoreOS 把 USERDATASIZE 写死 2048；改为可用 ROOTFS_DATA_PARTSIZE 覆盖，默认 4096。
-# 注意：只影响 rootfs_data（可写 overlay）分区，rootfs 仍由 CONFIG_TARGET_ROOTFS_PARTSIZE 决定。
-GEN="$ROOT/scripts/gen_image_generic.sh"
-[ -f "$GEN" ] || die "找不到 $GEN"
-if ! grep -q 'ROOTFS_DATA_PARTSIZE' "$GEN"; then
-	sed -i 's/^USERDATASIZE="2048"$/USERDATASIZE="${ROOTFS_DATA_PARTSIZE:-4096}"/' "$GEN"
-	grep -q 'ROOTFS_DATA_PARTSIZE' "$GEN" \
-		|| die "gen_image_generic.sh 结构变化：未找到 USERDATASIZE=\"2048\"，请检查 iStoreOS 是否改了分区脚本"
-	say "gen_image_generic.sh: rootfs_data 默认 4096 MiB（ROOTFS_DATA_PARTSIZE 可覆盖）"
-else
-	say "gen_image_generic.sh: 已是可覆盖形式，跳过"
-fi
-
-say "完成（u-boot $UV，overlay 覆盖 + 板级文件 + 构建系统插入 + rootfs_data=4096）"
+say "完成（u-boot $UV，overlay 覆盖 + 板级文件 + 构建系统插入）"
