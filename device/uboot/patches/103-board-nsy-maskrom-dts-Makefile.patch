@@ -1,0 +1,9 @@
+--- a/arch/arm/dts/Makefile
+--- b/arch/arm/dts/Makefile
+@@ -1284,3 +1284,6 @@
+ 	@:
+ 
+ clean-files := *.dtb *.dtbo *_HS
++
++# NSY G68-PLUS (istoreos-hybrid-g68 overlay)
++dtb-$(CONFIG_ROCKCHIP_RK3568) += rk3568-nsy-g68-plus.dtb
