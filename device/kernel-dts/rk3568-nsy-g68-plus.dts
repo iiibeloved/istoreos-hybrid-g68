@@ -760,9 +760,10 @@
 	status = "okay";
 };
 
-&xpcs {
-	status = "okay";
-};
+/* iStoreOS 的 6.6 内核是 mainline 版，没有 BSP 的 xpcs syscon 节点，
+ * 也没有 rockchip,xpcs 解析（vendor 补丁 710/711），这里不再引用。
+ * SGMII 走 combphy1 + pipegrf，与 mainline rk3568 板级配置一致。
+ */
 
 &gmac1 {
 	assigned-clocks = <&cru SCLK_GMAC1_RX_TX>;
@@ -770,7 +771,6 @@
 	status = "okay";
 	phy-mode = "sgmii";
 	rockchip,pipegrf = <&pipegrf>;
-	rockchip,xpcs = <&xpcs>;
 	//snps,reset-gpio = <&gpio2 RK_PC2 GPIO_ACTIVE_LOW>;
 	//snps,reset-active-low;
 	//snps,reset-delays-us = <0 20000 100000>;
@@ -993,9 +993,9 @@
 	};
 };
 
-&rng {
-	status = "okay";
-};
+/* rng 节点由 iStoreOS 的 rk3568-ip.dtsi 提供（本 dts 未 include），
+ * mainline rk3568.dtsi 里没有 rng label，故不在此启用。
+ */
 
 //i2c@fe5a0000
 &i2c1 {

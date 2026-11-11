@@ -52,6 +52,11 @@ echo "== 6. 内核 DTS =="
 for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key"; do
 	grep -q "$pat" "$KDTS" && ok "kernel dts: $pat" || bad "kernel dts 缺 $pat"
 done
+# iStoreOS 6.6 用 mainline rk356x.dtsi：没有 xpcs/rng 标签（rk3568-ip.dtsi 未被 include）
+for pat in "&xpcs" "&rng"; do
+	! grep -q "$pat" "$KDTS" && ok "kernel dts 未引用 mainline 不存在的 $pat" \
+		|| bad "kernel dts 引用了 $pat（mainline 6.6 无此 label，会 dtc 报错）"
+done
 
 echo "== 7. 构建系统插入 =="
 grep -q "U-Boot/nsy-g68-plus-rk3568" "$UB/Makefile" && ok "U-Boot 目标定义" || bad "缺 U-Boot 目标定义"
