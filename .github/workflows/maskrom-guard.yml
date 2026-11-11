@@ -1,0 +1,46 @@
+name: maskrom-guard
+
+# 核心功能「长按 Reset→MaskROM」的存在性守卫。
+# 任何对 device/ scripts/ 的提交都会在 1 分钟内被检查：
+#   - 不允许出现 u-boot patch 投递（必须 overlay-only）
+#   - overlay 四个文件必须包含 spl_board_init / 0xEF08A53C / 0xfdc20200 / ADC 通道 / dtb 登记
+#   - 板级 defconfig 必须启用 ADC/SPL_ADC
+# 失败即代表核心功能被破坏，禁止合并到 main（配合分支保护）。
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'device/**'
+      - 'scripts/**'
+      - 'configs/**'
+      - '.github/workflows/maskrom-guard.yml'
+  pull_request:
+    paths:
+      - 'device/**'
+      - 'scripts/**'
+      - 'configs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  maskrom-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 核心功能守卫（repo 模式）
+        run: sh scripts/verify-maskrom.sh --repo 2>&1 | tee guard.log
+      - name: 禁止 patch 投递
+        run: |
+          set -eu
+          if [ -d device/uboot/patches ]; then echo "::error::device/uboot/patches 存在（必须 overlay-only）"; exit 1; fi
+          echo "overlay-only ✅"
+      - name: 上传守卫日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maskrom-guard-log
+          path: guard.log
+          retention-days: 7

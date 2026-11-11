@@ -1,0 +1,40 @@
+<script type="text/javascript">//<![CDATA[
+	XHR.poll(5, '<%=url("admin/services/dockermanager_status")%>', null,
+		function(x, st)
+		{
+			var tb = document.getElementById('dockermanager_status');
+			if (st && tb)
+			{
+					var status = st.running
+						? '<br/><em style=\"color:green\"><%:Docker 管理器服务正在运行。%></em>'
+						: '<br/><em style=\"color:red\"><%:Docker 管理器服务未运行。%></em>';
+					if (st.proxy_prefix_enabled && st.app_entry_running)
+					{
+						status = status + '<br/><em><%:访问方式：LinkEase 桌面代理。%></em>';
+					}
+					else if (st.external_port_enabled)
+					{
+						status = status + '<br/><em><%:访问方式：外部端口。%></em>';
+					}
+					else
+					{
+						status = status + '<br/><em><%:外部端口访问已禁用。%></em>';
+					}
+					tb.innerHTML = status;
+
+				if (st.running)
+				{
+					tb.innerHTML = tb.innerHTML
+						+ "<br/><br/><input class=\"btn cbi-button cbi-button-apply\" type=\"button\" value=\" <%:打开 Docker 管理器%> \" onclick=\"window.open('<%=url("admin/services/dockermanager/open")%>')\"/>";
+				}
+			}
+		}
+	);
+//]]></script>
+
+<fieldset class="cbi-section">
+	<legend><%:Docker 管理器状态%></legend>
+	<p id="dockermanager_status">
+		<em><%:正在收集数据…%></em>
+	</p>
+</fieldset>

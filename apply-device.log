@@ -1,0 +1,6 @@
+[apply-device] u-boot 版本校验通过：2024.10
+[apply-device] overlay 已投递到 /tmp/istub/package/boot/uboot-rockchip/src/（Makefile / boot_mode.c / rk3568.c / dts/Makefile）
+[apply-device] 板级文件已放置（u-boot dts / dtsi / defconfig）
+[apply-device] 内核补丁已放置: 910-710-ethernet-stmicro-stmmac-Add-SGMII-QSGMII-support-for.patch 911-711-arm64-dts-rockchip-rk3568-Add-xpcs-support.patch 912-997-rockchip-naneng-combo-phy-add-sgmii-mac-sel.patch 913-9999-ethernet-stmmac-dwmac-rk-Disable-Auto-Nego-for-1000.patch 
+[apply-device] 内核 DTS 已放置
+[apply-device] 完成（overlay-only，u-boot 2024.10，核心功能守卫通过）

@@ -1,0 +1,356 @@
+<%#
+ Copyright 2024 DustReliant
+ Licensed to the public under the MIT License.
+-%>
+
+<%+header%>
+
+<div class="cbi-map">
+    <h2 name="content"><%:File Management%></h2>
+
+    <div class="cbi-section">
+        <div class="cbi-section-descr"><%:Browse and manage system files%></div>
+
+        <!-- 简洁的地址栏 -->
+        <div class="path-bar">
+            <input type="text" id="current-path" value="/" placeholder="<%:Enter path...%>" class="path-input">
+            <button class="btn btn-primary" onclick="navigateToPath()"><%:Go%></button>
+            <button class="btn btn-secondary" onclick="refreshFiles()"><%:Refresh%></button>
+        </div>
+
+        <!-- 简洁的文件列表 -->
+        <div class="file-browser">
+            <div class="file-list" id="file-list">
+                <div class="loading" id="loading"><%:Loading...%></div>
+            </div>
+        </div>
+
+        <!-- 状态栏 -->
+        <div class="status-bar">
+            <span id="file-count">0 <%:items%></span>
+        </div>
+    </div>
+</div>
+
+<style>
+.cbi-map {
+    background: #f5f5f5;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.cbi-section {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.cbi-section-descr {
+    color: #666;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* 地址栏 */
+.path-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    align-items: center;
+}
+
+.path-input {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: 14px;
+}
+
+.path-input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+/* 文件浏览器 */
+.file-browser {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background: white;
+    min-height: 400px;
+}
+
+.file-list {
+    padding: 0;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.file-item:hover {
+    background: #f8f9fa;
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.file-item.folder {
+    background: #fff9e6;
+}
+
+.file-item.folder:hover {
+    background: #e6f3ff;
+}
+
+.file-icon {
+    font-size: 20px;
+    margin-right: 12px;
+    width: 24px;
+    text-align: center;
+}
+
+.file-name {
+    flex: 1;
+    font-weight: 500;
+    color: #333;
+    word-break: break-all;
+}
+
+.file-info {
+    display: flex;
+    gap: 20px;
+    color: #666;
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.file-size {
+    min-width: 80px;
+    text-align: right;
+}
+
+.file-date {
+    min-width: 120px;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+}
+
+.status-bar {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    color: #666;
+    font-size: 14px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .path-bar {
+        flex-direction: column;
+    }
+
+    .file-info {
+        display: none;
+    }
+
+    .file-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}
+</style>
+
+<script>
+let currentPath = '/';
+
+// HTML 转义(含引号,可安全用于属性)
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = (text === null || text === undefined) ? '' : String(text);
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// 错误上报(走需鉴权的管理接口)
+function log错误(type, message, details) {
+    const body = new URLSearchParams({
+        error_type: type || 'error',
+        error_message: message || 'Unknown error',
+        error_details: details || '',
+        error_url: window.location.href,
+        token: '<%=token%>'
+    });
+
+    fetch('<%=luci.dispatcher.build_url("admin", "system", "filetransfer", "log_error")%>', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString()
+    }).catch(err => {
+        console.error('Failed to log error:', err);
+    });
+}
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    refreshFiles();
+
+    // 事件委托处理文件夹导航,避免内联 onclick 被特殊字符破坏
+    document.getElementById('file-list').addEventListener('click', function(e) {
+        const item = e.target.closest('.file-item[data-path]');
+        if (item) {
+            navigateTo(item.getAttribute('data-path'));
+        }
+    });
+});
+
+// 导航到指定路径
+function navigateTo(path) {
+    path = String(path || '/').replace(/\/+/g, '/');
+    if (path !== '/' && path.endsWith('/')) {
+        path = path.slice(0, -1);
+    }
+    if (!path.startsWith('/')) {
+        path = '/' + path;
+    }
+
+    currentPath = path || '/';
+    document.getElementById('current-path').value = currentPath;
+    refreshFiles();
+}
+
+// 从地址栏导航
+function navigateToPath() {
+    navigateTo(document.getElementById('current-path').value);
+}
+
+// 刷新文件列表
+function refreshFiles() {
+    const fileList = document.getElementById('file-list');
+
+    fileList.innerHTML = '<div class="loading"><%:Loading...%></div>';
+
+    const body = new URLSearchParams({
+        path: currentPath,
+        token: '<%=token%>'
+    });
+
+    fetch('<%=luci.dispatcher.build_url("admin", "system", "filetransfer", "browse_files")%>', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString()
+    })
+    .then(response => {
+        if (!response.ok) {
+            log错误('HTTP_ERROR', `HTTP ${response.status}: ${response.statusText}`, 'browse_files');
+            throw new 错误(`HTTP ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            displayFiles(data.files || []);
+        } else {
+            throw new 错误(data.message || 'API returned error status');
+        }
+    })
+    .catch(error => {
+        console.error('错误 loading files:', error);
+        log错误('FETCH_ERROR', error.message, `current path: ${currentPath}`);
+        fileList.innerHTML = '<div class="loading"><%:Failed to load file list:%> ' + escapeHtml(error.message) + '</div>';
+        updateFileCount(0);
+    });
+}
+
+// 显示文件列表
+function displayFiles(files) {
+    const fileList = document.getElementById('file-list');
+
+    updateFileCount(files.length);
+
+    if (files.length === 0) {
+        fileList.innerHTML = '<div class="loading"><%:No files found%></div>';
+        return;
+    }
+
+    let html = '';
+    files.forEach(file => {
+        const isFolder = file.type === 'directory';
+        const icon = isFolder ? '📁' : '📄';
+        const sizeDisplay = isFolder ? '-' : formatFileSize(file.size);
+        const safeName = escapeHtml(file.name);
+        const safePath = escapeHtml(file.path || '');
+        const safeDate = escapeHtml(file.modified || '');
+
+        html += `
+            <div class="file-item ${isFolder ? 'folder' : ''}" ${isFolder ? `data-path="${safePath}" title="<%:Open this folder%>"` : ''}>
+                <div class="file-icon">${icon}</div>
+                <div class="file-name">${safeName}</div>
+                <div class="file-info">
+                    <div class="file-size">${sizeDisplay}</div>
+                    <div class="file-date">${safeDate}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    fileList.innerHTML = html;
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// 更新文件计数
+function updateFileCount(count) {
+    document.getElementById('file-count').textContent = `${count} <%:items%>`;
+}
+</script>
+
+<%+footer%>
