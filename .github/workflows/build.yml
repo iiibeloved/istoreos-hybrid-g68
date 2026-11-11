@@ -160,7 +160,25 @@ jobs:
           git add configs/builtin-list.txt configs/g68-hybrid.config
           if git diff --cached --quiet; then echo "无重复项，无需回写"; exit 0; fi
           git commit -m "chore(packages): 以上游包清单为基准注释重复项 [skip ci]"
-          git push
+          # 并发保护：prepare 运行期间远端可能已有新提交（例如 DTS 修复），
+          # 直接 push 会 non-fast-forward 失败（深度扫描 run 42956738930 实测）。
+          # 先同步远端并 rebase；任一步失败只告警跳过，下次构建会重新生成注释副本。
+          BRANCH="${GITHUB_REF_NAME}"
+          if ! git fetch --quiet --unshallow origin "$BRANCH" 2>/dev/null \
+             && ! git fetch --quiet origin "$BRANCH"; then
+            echo "::warning::无法同步远端，跳过本次回写（下次构建会重新生成）"
+            exit 0
+          fi
+          if ! git rebase --quiet "origin/$BRANCH"; then
+            git rebase --abort || true
+            echo "::warning::回写与远端新提交冲突，跳过本次回写（下次构建会重新生成）"
+            exit 0
+          fi
+          if ! git push origin "HEAD:$BRANCH"; then
+            echo "::warning::回写推送失败（并发或权限），跳过本次回写（下次构建会重新生成）"
+            exit 0
+          fi
+          echo "回写完成：$(git rev-parse --short HEAD)"
 
       - name: 上传自检报告
         uses: actions/upload-artifact@v4
