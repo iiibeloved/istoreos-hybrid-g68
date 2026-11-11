@@ -361,11 +361,19 @@ jobs:
         run: |
           set -euo pipefail
           # GitHub Azure 运行器对 security.ubuntu.com 解析不稳定，切到 Azure 内网镜像
-          for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
-          [ -f "$f" ] || continue
-          sudo sed -i "s|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|http://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g" "$f" || true
-          done
           sudo apt-get clean
+          # 26.04 使用 deb822 .sources + mirror+file 重定向；直接重写源为 Azure 内网镜像
+          . /etc/os-release 2>/dev/null || true
+          CODENAME="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo noble)}"
+          sudo rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list /etc/apt/sources.list.d/*.sources
+          sudo tee /etc/apt/sources.list.d/azure.sources >/dev/null <<EOF
+          Types: deb
+          URIs: http://azure.archive.ubuntu.com/ubuntu
+          Suites: ${CODENAME} ${CODENAME}-updates ${CODENAME}-backports ${CODENAME}-security
+          Components: main restricted universe multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          sudo apt-get -o Acquire::Retries=5 clean
           for i in 1 2 3; do
             if sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio; then
               echo "依赖安装成功（第 $i 次尝试）"; break
@@ -477,11 +485,19 @@ jobs:
         run: |
           set -euo pipefail
           # GitHub Azure 运行器对 security.ubuntu.com 解析不稳定，切到 Azure 内网镜像
-          for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do
-          [ -f "$f" ] || continue
-          sudo sed -i "s|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|http://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g;s|https://security.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g" "$f" || true
-          done
           sudo apt-get clean
+          # 26.04 使用 deb822 .sources + mirror+file 重定向；直接重写源为 Azure 内网镜像
+          . /etc/os-release 2>/dev/null || true
+          CODENAME="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo noble)}"
+          sudo rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list /etc/apt/sources.list.d/*.sources
+          sudo tee /etc/apt/sources.list.d/azure.sources >/dev/null <<EOF
+          Types: deb
+          URIs: http://azure.archive.ubuntu.com/ubuntu
+          Suites: ${CODENAME} ${CODENAME}-updates ${CODENAME}-backports ${CODENAME}-security
+          Components: main restricted universe multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          sudo apt-get -o Acquire::Retries=5 clean
           for i in 1 2 3; do
             if sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio; then
               echo "依赖安装成功（第 $i 次尝试）"; break
