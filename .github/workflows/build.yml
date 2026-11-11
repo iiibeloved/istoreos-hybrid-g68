@@ -356,33 +356,31 @@ jobs:
 
           sh scripts/selftest.sh istoreos >/dev/null
 
-      - name: 安装依赖
-
+      - name: 安装编译依赖（容错版）
         run: |
-          set -euo pipefail
-          # GitHub Azure 运行器对 security.ubuntu.com 解析不稳定，切到 Azure 内网镜像
-          sudo apt-get clean
-          # 26.04 使用 deb822 .sources + mirror+file 重定向；直接重写源为 Azure 内网镜像
-          . /etc/os-release 2>/dev/null || true
-          CODENAME="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo noble)}"
-          sudo rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list /etc/apt/sources.list.d/*.sources
-          sudo tee /etc/apt/sources.list.d/azure.sources >/dev/null <<EOF
-          Types: deb
-          URIs: http://azure.archive.ubuntu.com/ubuntu
-          Suites: ${CODENAME} ${CODENAME}-updates ${CODENAME}-backports ${CODENAME}-security
-          Components: main restricted universe multiverse
-          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          EOF
-          sudo apt-get -o Acquire::Retries=5 clean
-          for i in 1 2 3; do
-            if sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio; then
-              echo "依赖安装成功（第 $i 次尝试）"; break
+          set -uo pipefail
+          PKGS="build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libelf-dev libncurses-dev libssl-dev python3 rsync swig unzip zlib1g-dev file wget curl ca-certificates ccache time python3-pyelftools python3-setuptools python3-dev libgnutls28-dev device-tree-compiler bc bzip2 patch perl cpio xsltproc"
+          apt_ok=0
+          for i in 1 2 3 4 5 6; do
+            echo "== apt 尝试 $i/6 =="
+            if sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq 2>/dev/null; then
+              if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PKGS 2>/dev/null; then apt_ok=1; break; fi
             fi
-            echo "::warning::apt 失败，10 秒后重试（$i/3）"; sleep 10
+            sleep 20
           done
-          sudo apt-get install -y -qq build-essential >/dev/null || { echo "::error::依赖安装失败"; exit 1; }
-
-
+          if [ "$apt_ok" != "1" ]; then
+            echo "::warning::apt 源不可用（DNS/镜像问题），改为校验运行器已有工具"
+          fi
+          missing=""
+          for t in gcc make gawk gettext wget unzip python3 swig rsync bc cpio git file bzip2 perl; do
+            command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
+          done
+          if [ -n "$missing" ]; then echo "::error::缺少关键工具:$missing（apt 与预装均不可用）"; exit 1; fi
+          python3 -c 'import elftools' 2>/dev/null || python3 -m pip install --quiet pyelftools 2>/dev/null || echo "::warning::pyelftools 缺失（后续 RK 打包可能需要，若失败再处理）"
+          gcc --version | head -1
+          ccache --version 2>/dev/null | head -1 || echo "::warning::无 ccache（仅影响缓存速度）"
+          python3 --version
+          python3 -c 'import elftools; print("pyelftools", elftools.__version__)' 2>/dev/null || true
 
       - name: 更新 feeds
 
@@ -480,33 +478,31 @@ jobs:
 
 
 
-      - name: 安装依赖
-
+      - name: 安装编译依赖（容错版）
         run: |
-          set -euo pipefail
-          # GitHub Azure 运行器对 security.ubuntu.com 解析不稳定，切到 Azure 内网镜像
-          sudo apt-get clean
-          # 26.04 使用 deb822 .sources + mirror+file 重定向；直接重写源为 Azure 内网镜像
-          . /etc/os-release 2>/dev/null || true
-          CODENAME="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo noble)}"
-          sudo rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list /etc/apt/sources.list.d/*.sources
-          sudo tee /etc/apt/sources.list.d/azure.sources >/dev/null <<EOF
-          Types: deb
-          URIs: http://azure.archive.ubuntu.com/ubuntu
-          Suites: ${CODENAME} ${CODENAME}-updates ${CODENAME}-backports ${CODENAME}-security
-          Components: main restricted universe multiverse
-          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          EOF
-          sudo apt-get -o Acquire::Retries=5 clean
-          for i in 1 2 3; do
-            if sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio; then
-              echo "依赖安装成功（第 $i 次尝试）"; break
+          set -uo pipefail
+          PKGS="build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libelf-dev libncurses-dev libssl-dev python3 rsync swig unzip zlib1g-dev file wget curl ca-certificates ccache time python3-pyelftools python3-setuptools python3-dev libgnutls28-dev device-tree-compiler bc bzip2 patch perl cpio xsltproc"
+          apt_ok=0
+          for i in 1 2 3 4 5 6; do
+            echo "== apt 尝试 $i/6 =="
+            if sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update -qq 2>/dev/null; then
+              if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PKGS 2>/dev/null; then apt_ok=1; break; fi
             fi
-            echo "::warning::apt 失败，10 秒后重试（$i/3）"; sleep 10
+            sleep 20
           done
-          sudo apt-get install -y -qq build-essential >/dev/null || { echo "::error::依赖安装失败"; exit 1; } time
-
-
+          if [ "$apt_ok" != "1" ]; then
+            echo "::warning::apt 源不可用（DNS/镜像问题），改为校验运行器已有工具"
+          fi
+          missing=""
+          for t in gcc make gawk gettext wget unzip python3 swig rsync bc cpio git file bzip2 perl; do
+            command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
+          done
+          if [ -n "$missing" ]; then echo "::error::缺少关键工具:$missing（apt 与预装均不可用）"; exit 1; fi
+          python3 -c 'import elftools' 2>/dev/null || python3 -m pip install --quiet pyelftools 2>/dev/null || echo "::warning::pyelftools 缺失（后续 RK 打包可能需要，若失败再处理）"
+          gcc --version | head -1
+          ccache --version 2>/dev/null | head -1 || echo "::warning::无 ccache（仅影响缓存速度）"
+          python3 --version
+          python3 -c 'import elftools; print("pyelftools", elftools.__version__)' 2>/dev/null || true
 
       - name: 核心功能守卫（编译前，防被覆盖）
         shell: bash
