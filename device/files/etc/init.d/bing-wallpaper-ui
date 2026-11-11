@@ -1,8 +1,0 @@
-#!/bin/sh /etc/rc.common
-# 每次开机确保「语言和界面」里的「登录背景」下拉存在（luci-mod-system 升级会覆盖视图）
-START=96
-start() {
-	[ -x /usr/bin/bing-wallpaper-ui ] && /usr/bin/bing-wallpaper-ui >/dev/null 2>&1
-	[ -x /usr/bin/bing-wallpaper ] && [ "$(uci -q get argon.@global[0].online_wallpaper 2>/dev/null)" = "bing" ] && rm -f /var/run/argon_bing.url
-}
-stop() { :; }

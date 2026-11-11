@@ -1,5 +1,0 @@
-#!/bin/sh
-# 首次启动：注入「登录背景」下拉并启用开机守卫
-/usr/bin/bing-wallpaper-ui >/dev/null 2>&1 || true
-/etc/init.d/bing-wallpaper-ui enable 2>/dev/null || true
-exit 0
