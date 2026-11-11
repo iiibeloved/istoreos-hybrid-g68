@@ -454,120 +454,11 @@ jobs:
 
 
 
-      - name: 断言按键链路（overlay 源码 + .config + strings）
-
+      - name: 核心功能守卫（长按 Reset→MaskROM 产物级校验）
         shell: bash
-
         run: |
-
-          set -uo pipefail
-
-          BIN=$(find istoreos/build_dir -name 'u-boot-rockchip.bin' -path '*nsy-g68-plus*' | head -1 || true)
-
-          [ -n "$BIN" ] || BIN=$(find istoreos/staging_dir -name 'nsy-g68-plus-rk3568-u-boot-rockchip.bin' | head -1 || true)
-
-          if [ -z "$BIN" ]; then echo "::error::未找到 G68 的 u-boot-rockchip.bin"; find istoreos/build_dir -maxdepth 3 -name 'u-boot-*' -type d | head; exit 1; fi
-
-          echo "u-boot-rockchip.bin: $BIN ($(stat -c%s "$BIN") 字节)"
-
-
-
-          FAIL=0
-
-
-
-          # --- 源码级：确认 overlay 已把 patch101 等价改动铺进构建树 ---
-
-          BM=$(find istoreos/build_dir -path '*u-boot-2024.10/arch/arm/mach-rockchip/boot_mode.c' -path '*nsy-g68-plus*' | head -1)
-
-          if [ -n "$BM" ]; then
-
-            echo "--- 构建树里的 boot_mode.c ($BM) ---"
-
-            grep -q 'rockchip_dnl_key_pressed' "$BM" \
-
-              && echo "  [OK] rockchip_dnl_key_pressed（按键检测）" \
-
-              || { echo "::error::boot_mode.c 缺少 rockchip_dnl_key_pressed，overlay 未生效"; FAIL=1; }
-
-            grep -q 'set_back_to_bootrom_dnl_flag' "$BM" \
-
-              && echo "  [OK] set_back_to_bootrom_dnl_flag（进 MaskROM 路径）" \
-
-              || { echo "::error::boot_mode.c 缺少 set_back_to_bootrom_dnl_flag，进 MaskROM 路径缺失"; FAIL=1; }
-
-            grep -q 'CONFIG_ROCKCHIP_BOOT_MODE_REG == 0' "$BM" \
-
-              && { echo "::error::boot_mode.c 仍含 '#if (CONFIG_ROCKCHIP_BOOT_MODE_REG == 0)' 空桩，复位键→MaskROM 静默失效"; FAIL=1; } \
-
-              || echo "  [OK] boot_mode.c 无 #if(==0) 空桩守卫"
-
-          else
-
-            echo "::error::构建树中未找到 boot_mode.c"; FAIL=1
-
-          fi
-
-          RK=$(find istoreos/build_dir -path '*u-boot-2024.10/arch/arm/mach-rockchip/rk3568/rk3568.c' -path '*nsy-g68-plus*' | head -1)
-
-          if [ -n "$RK" ]; then
-
-            grep -q 'setup_boot_mode' "$RK" \
-
-              && echo "  [OK] rk3568.c spl_board_init → setup_boot_mode 调用链" \
-
-              || echo "::warning::rk3568.c 未见 setup_boot_mode 调用"
-
-          else
-
-            echo "::warning::构建树中未找到 rk3568.c"
-
-          fi
-
-
-
-          CFG=$(find istoreos/build_dir -path '*u-boot-2024.10/.config' -path '*nsy-g68-plus*' | head -1)
-
-          [ -n "$CFG" ] || CFG=$(find istoreos/build_dir -path '*u-boot-2024.10/.config' | head -1)
-
-          echo "--- u-boot .config 关键项 ($CFG) ---"
-
-          grep -E "^CONFIG_(DM|ADC|SPL_DM|SPL_ADC|SARADC_ROCKCHIP|CMD_ADC|ROCKCHIP_BOOT_MODE_REG)=" "$CFG" || echo "  (无匹配项)"
-
-
-
-          # --- 二进制级：确认 SPL 段确实编进镜像 ---
-
-          strings "$BIN" | grep -q "download key pressed" && echo "  [OK] download key pressed" || { echo "::error::缺少 download key pressed"; FAIL=1; }
-
-          strings "$BIN" | grep -q "adc_channel_single_shot" && echo "  [OK] adc_channel_single_shot" || echo "  [note] adc_channel_single_shot 为函数名非字符串字面量，跳过（已由 saradc 字符串 + CONFIG_SPL_ADC 证明）"
-
-          strings "$BIN" | grep -q "saradc" && echo "  [OK] saradc（SARADC 驱动已编入 SPL）" || { echo "::error::缺少 saradc 字符串（SARADC 驱动未启用）"; FAIL=1; }
-
-          grep -q "^CONFIG_ROCKCHIP_BOOT_MODE_REG=0xfdc20200" "$CFG" || { echo "::error::BOOT_MODE_REG != 0xfdc20200"; FAIL=1; }
-
-          [ "$FAIL" = "0" ] || { echo "::error::u-boot 按键链路断言未通过"; exit 1; }
-
-          echo "u-boot 按键链路断言通过 ✅"
-
-
-
-  # ---------- 全量固件构建 ----------
-
-  build:
-
-    needs: [ prepare, uboot-check ]
-
-    if: always() && needs.prepare.result == 'success' && needs.uboot-check.result == 'success' && (inputs.stage == 'full' || github.event_name != 'workflow_dispatch')
-
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - uses: actions/checkout@v4
-
-
-
+          set -euo pipefail
+          sh scripts/verify-maskrom.sh istoreos --built
       - name: 拉源码并应用设备层
 
         run: |
@@ -615,6 +506,12 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext libssl-dev xsltproc wget unzip python3 python3-pyelftools swig zstd rsync bc cpio time
 
 
+
+      - name: 核心功能守卫（编译前，防被覆盖）
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/verify-maskrom.sh istoreos
 
       - name: 编译固件
 
