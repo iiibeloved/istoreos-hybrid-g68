@@ -126,6 +126,13 @@ if ! grep -q 'ROOTFS_DATA_PARTSIZE' "$GEN"; then
 	say "gen_image_generic.sh: rootfs_data 默认 4096 MiB"
 fi
 
+# ---------- 7.5) 自定义 files/（Argon 必应壁纸等）----------
+if [ -d "$DEV/files" ]; then
+	mkdir -p "$ROOT/files"
+	cp -a "$DEV/files/." "$ROOT/files/"
+	say "自定义文件已放置到 $ROOT/files/（$(cd "$DEV/files" && find . -type f | wc -l) 个文件）"
+fi
+
 # ---------- 8) 核心功能守卫 ----------
 sh "$HERE/scripts/verify-maskrom.sh" "$ROOT" || die "长按 Reset→MaskROM 核心功能校验失败"
 say "完成（overlay-only，u-boot $UV，核心功能守卫通过）"

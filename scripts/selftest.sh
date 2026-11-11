@@ -34,3 +34,8 @@ grep -q 'ROOTFS_DATA_PARTSIZE:-4096' "$ROOT/scripts/gen_image_generic.sh" && ok 
 echo
 [ "$FAIL" -gt 0 ] && { echo "自检失败：$FAIL 项"; exit 1; }
 echo "自检全部通过 ✅"
+
+echo "== 4. 自定义 files/ =="
+for f in usr/bin/bing-wallpaper usr/share/luci/menu.d/luci-app-bingwallpaper.json usr/share/rpcd/acl.d/luci-app-bingwallpaper.json www/luci-static/resources/view/bingwallpaper/bingwallpaper.js; do
+	[ -s "$ROOT/files/$f" ] && ok "files/$f" || bad "缺 files/$f"
+done

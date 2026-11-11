@@ -1,0 +1,14 @@
+{
+	"luci-app-bingwallpaper": {
+		"description": "Argon 登录页必应每日壁纸",
+		"read": {
+			"uci": [ "argon" ],
+			"ubus": { "luci.argon_wallpaper": [ "get_url" ] },
+			"file": { "/usr/bin/bing-wallpaper": [ "exec" ] }
+		},
+		"write": {
+			"uci": [ "argon" ],
+			"file": { "/usr/bin/bing-wallpaper": [ "exec" ] }
+		}
+	}
+}

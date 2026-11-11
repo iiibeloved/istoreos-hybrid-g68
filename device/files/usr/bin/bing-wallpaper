@@ -1,0 +1,46 @@
+#!/bin/sh
+# 必应每日壁纸（Argon 登录页在线壁纸）
+# 用法: bing-wallpaper enable|disable|refresh|status|url
+. /lib/functions.sh
+CONF=/etc/config/argon
+CACHE_BING=/var/run/argon_bing.url
+
+ensure_section() {
+	uci -q get argon.@global[0] >/dev/null 2>&1 || {
+		[ -f "$CONF" ] || : > "$CONF"
+		uci -q add argon global >/dev/null
+	}
+}
+
+case "$1" in
+	enable)
+		ensure_section
+		uci set argon.@global[0].online_wallpaper='bing'
+		uci commit argon
+		rm -f "$CACHE_BING"
+		echo "enabled"
+		;;
+	disable)
+		ensure_section
+		uci set argon.@global[0].online_wallpaper='none'
+		uci commit argon
+		rm -f "$CACHE_BING"
+		echo "disabled"
+		;;
+	refresh)
+		rm -f "$CACHE_BING"
+		ubus call luci.argon_wallpaper get_url 2>/dev/null
+		;;
+	status)
+		v=$(uci -q get argon.@global[0].online_wallpaper || echo none)
+		[ -z "$v" ] && v=none
+		echo "$v"
+		;;
+	url)
+		[ -f "$CACHE_BING" ] && cat "$CACHE_BING" || ubus call luci.argon_wallpaper get_url 2>/dev/null | sed -n 's/.*"url": "\(.*\)".*/\1/p'
+		;;
+	*)
+		echo "用法: $0 enable|disable|refresh|status|url" >&2
+		exit 1
+		;;
+esac
