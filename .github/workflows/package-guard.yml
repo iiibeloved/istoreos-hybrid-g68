@@ -1,0 +1,142 @@
+name: g68-hybrid-package-guard
+
+# 以 iStoreOS 上游包清单为基准，检查 builtin-list 与 hybrid defconfig：
+# 同名重复 / PROVIDES 虚拟包冲突 / CONFLICTS -> 注释（上游优先）
+# 上游查不到的包 -> 只告警，留待 Phase 2 人工映射
+#
+# 每次构建的常规去重已由 build.yml 的 prepare job 内联 step 完成（方式 B，
+# 复用已有 iStoreOS 源码树与 make defconfig 结果，零额外克隆）。
+# 本工作流是「深度扫描」通道：完整 feeds update/install 后生成上游基准，
+# 用于 workflow_dispatch 手动审查、workflow_call 复用、每周日定时巡检。
+# 因此这里不再监听 push / pull_request，避免与 build.yml 重复执行、
+# 也避免两个工作流同时回写 configs/ 造成 push 冲突。
+#
+# commit_result 默认开启：把注释结果回写 configs/，提交信息带 [skip ci]，
+# 不会再次触发全量构建。定时巡检（schedule）没有 inputs，只出报告不回写。
+
+on:
+  workflow_call:
+    inputs:
+      commit_result:
+        description: 是否把注释结果回写 configs/
+        type: boolean
+        default: true
+    outputs:
+      duplicates:
+        description: 同名重复数
+        value: ${{ jobs.guard.outputs.duplicates }}
+      provides_conflicts:
+        description: PROVIDES 冲突数
+        value: ${{ jobs.guard.outputs.provides_conflicts }}
+      unknown:
+        description: 上游未知包数
+        value: ${{ jobs.guard.outputs.unknown }}
+  workflow_dispatch:
+    inputs:
+      commit_result:
+        description: 是否把注释结果回写 configs/
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 17 * * 6'      # 每周日 01:00 CST，早于 build.yml 的 02:00
+
+concurrency:
+  group: g68-hybrid-package-guard-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Shanghai
+  ISTOREOS_BRANCH: istoreos-24.10
+  ISTOREOS_URL: https://github.com/istoreos/istoreos.git
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      duplicates: ${{ steps.g.outputs.duplicates }}
+      provides_conflicts: ${{ steps.g.outputs.provides_conflicts }}
+      unknown: ${{ steps.g.outputs.unknown }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装构建元数据依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libncurses-dev gawk git gettext \
+            libssl-dev xsltproc wget unzip python3 rsync bc cpio
+
+      - name: 浅克隆 iStoreOS 上游
+        run: |
+          set -eu
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          git -C istoreos rev-parse HEAD | tee upstream-commit.txt
+
+      - name: 生成上游包清单基准
+        run: |
+          set -eu
+          cd istoreos
+          ./scripts/feeds update -a >/dev/null
+          ./scripts/feeds install -a >/dev/null
+          # 只选 subtarget，让 make defconfig 展开上游该 target 的默认包集合。
+          # 不套用 configs/g68-hybrid.config，否则「上游默认」会被我们的选择污染。
+          cat > .config <<'EOF'
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          EOF
+          make defconfig >/dev/null
+          cp .config ../upstream-default.config
+          echo "上游默认已选中 CONFIG_PACKAGE_*=y：$(grep -c '^CONFIG_PACKAGE_.*=y$' ../upstream-default.config)"
+          echo "上游 feeds 索引：$(ls feeds/*.index | wc -l) 份"
+          grep -E '^CONFIG_PACKAGE_dnsmasq.*=y$' ../upstream-default.config || true
+
+      - name: 对比并生成注释副本
+        id: g
+        run: |
+          set -eu
+          python3 scripts/package-guard.py \
+            --upstream-config upstream-default.config \
+            --index 'istoreos/feeds/*.index' \
+            --makefile-dir istoreos/package \
+            --makefile-dir istoreos/feeds \
+            --builtin-list configs/builtin-list.txt \
+            --hybrid-config configs/g68-hybrid.config \
+            --out-dir package-guard-out \
+            --json package-guard-out/report.json \
+            --md package-guard-out/report.md
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d = json.load(open('package-guard-out/report.json', encoding='utf-8'))['counts']
+          print('duplicates=%d' % d['duplicate'])
+          print('provides_conflicts=%d' % d['provides_conflict'])
+          print('unknown=%d' % d['unknown'])
+          PY
+          cat package-guard-out/report.md >> "$GITHUB_STEP_SUMMARY"
+          cp upstream-commit.txt package-guard-out/upstream-commit.txt
+
+      - name: 上传报告与注释副本
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-guard-report
+          path: package-guard-out/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 回写注释结果（默认开启，schedule 巡检只出报告）
+        if: ${{ inputs.commit_result == true }}
+        run: |
+          set -eu
+          cp package-guard-out/builtin-list.txt configs/builtin-list.txt
+          cp package-guard-out/g68-hybrid.config configs/g68-hybrid.config
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add configs/builtin-list.txt configs/g68-hybrid.config
+          if git diff --cached --quiet; then echo "无可回写的变更"; exit 0; fi
+          git commit -m "chore(packages): 以上游包清单为基准注释重复项 [skip ci]"
+          git push

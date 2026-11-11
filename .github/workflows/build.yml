@@ -21,6 +21,10 @@ on:
         description: "是否发布 Release"
         type: boolean
         default: true
+      commit_guard_result:
+        description: "包清单去重结果是否自动回写 configs/（提交带 [skip ci]）"
+        type: boolean
+        default: true
 
 concurrency:
   group: g68-hybrid-${{ github.ref }}
@@ -110,6 +114,53 @@ jobs:
             grep -q "^$sym=" /tmp/ours.config || echo "  DROPPED $sym"
           done | head -20
           grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" /tmp/ours.config || { echo "::error::设备未选中"; exit 1; }
+
+      # ---------- 方式 B：复用 prepare 已有的 iStoreOS 源码树做包清单去重 ----------
+      - name: 以上游包清单为基准去重（package-guard）
+        run: |
+          set -eu
+          # /tmp/default.config 是上一步 make defconfig 生成的上游默认包集合；
+          # istoreos/ 由 prepare 浅克隆并应用设备层，这里零额外克隆 / feeds update。
+          if [ ! -s /tmp/default.config ]; then
+            echo "::warning::上游默认 defconfig 缺失，跳过包清单去重"
+            exit 0
+          fi
+          python3 scripts/package-guard.py \
+            --upstream-config /tmp/default.config \
+            --index 'istoreos/feeds/*.index' \
+            --makefile-dir istoreos/package \
+            --makefile-dir istoreos/feeds \
+            --builtin-list configs/builtin-list.txt \
+            --hybrid-config configs/g68-hybrid.config \
+            --out-dir package-guard-out \
+            --json package-guard-out/report.json \
+            --md package-guard-out/report.md
+          cat package-guard-out/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传包清单去重报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-guard-report
+          path: package-guard-out/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 回写去重结果到 configs/
+        if: ${{ github.event_name != 'pull_request' && !contains(github.event.inputs.commit_guard_result, 'false') }}
+        run: |
+          set -eu
+          if [ ! -s package-guard-out/builtin-list.txt ] || [ ! -s package-guard-out/g68-hybrid.config ]; then
+            echo "无去重结果，跳过回写"
+            exit 0
+          fi
+          cp package-guard-out/builtin-list.txt configs/builtin-list.txt
+          cp package-guard-out/g68-hybrid.config configs/g68-hybrid.config
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add configs/builtin-list.txt configs/g68-hybrid.config
+          if git diff --cached --quiet; then echo "无重复项，无需回写"; exit 0; fi
+          git commit -m "chore(packages): 以上游包清单为基准注释重复项 [skip ci]"
+          git push
 
       - name: 上传自检报告
         uses: actions/upload-artifact@v4
