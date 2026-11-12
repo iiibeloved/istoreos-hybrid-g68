@@ -609,9 +609,26 @@ jobs:
 
 
 
+      - name: 上传固件 artifact
+
+        if: success()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: g68-hybrid-image-${{ github.run_number }}
+
+          path: |
+            *.img.gz
+            *.sha256
+            *.sha256sums
+
+          retention-days: 14
+
       - name: 发布 Release
 
-        if: inputs.publish != false
+        if: github.event_name != 'workflow_dispatch' || inputs.publish == 'true'
 
         env:
 
@@ -671,7 +688,7 @@ jobs:
 
       - name: 回写 upstream.lock
 
-        if: success() && inputs.publish != false
+        if: success()
 
         env:
 
@@ -797,5 +814,6 @@ jobs:
 
           done
 
-          [ -z "$NUMS" ] && echo "没有未关闭的失败 issue"
+          if [ -z "$NUMS" ]; then echo "没有未关闭的失败 issue"; fi
+          exit 0
 
