@@ -1,0 +1,61 @@
+name: upstream-watch
+
+# 上游变化自动构建：每小时检查 iStoreOS 分支 commit 是否与 upstream.lock 不同
+# - 有变化 → 自动 dispatch build.yml（stage=full, publish=true）
+# - 无变化 → 直接退出（几乎不消耗资源）
+# - 已有构建在跑 → 跳过，避免排队堆积
+
+on:
+  schedule:
+    - cron: '15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: g68-upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
+      ISTOREOS_URL: https://github.com/istoreos/istoreos.git
+      ISTOREOS_BRANCH: istoreos-24.10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查上游变化并按需触发构建
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            C=$(git ls-remote "$ISTOREOS_URL" "refs/heads/$ISTOREOS_BRANCH" | awk '{print $1}')
+            [ -n "$C" ] && break
+            sleep 10
+          done
+          [ -n "${C:-}" ] || { echo "::error::无法获取上游 commit"; exit 1; }
+          OLD=$(sed -n 's/^commit=//p' upstream.lock | head -1 || true)
+          echo "upstream=$C"
+          echo "lock=${OLD:-<空>}"
+
+          RUNNING=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?status=in_progress&per_page=1" --jq '.workflow_runs | length' 2>/dev/null || echo 0)
+          PENDING=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs?status=queued&per_page=1" --jq '.workflow_runs | length' 2>/dev/null || echo 0)
+          if [ "${RUNNING:-0}" -gt 0 ] || [ "${PENDING:-0}" -gt 0 ]; then
+            echo "已有构建在跑/排队（running=$RUNNING queued=$PENDING），跳过本次触发"
+            exit 0
+          fi
+
+          if [ -n "$OLD" ] && [ "$OLD" = "$C" ]; then
+            echo "上游未变化，无需构建"
+            exit 0
+          fi
+
+          echo "上游有变化（或 lock 为空），触发全量构建"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/dispatches" \
+            -f ref=main -f 'inputs[stage]=full' -f 'inputs[publish]=true'
+          echo "已触发"
