@@ -133,6 +133,13 @@ if [ -d "$DEV/files" ]; then
 	say "自定义文件已放置到 $ROOT/files/（$(cd "$DEV/files" && find . -type f | wc -l) 个文件）"
 fi
 
+# ---------- 7.55) 中文覆盖数据（按已安装应用条件投递）----------
+if [ -d "$DEV/i18n-overlay" ]; then
+	mkdir -p "$ROOT/files/usr/share/g68/i18n-overlay"
+	cp -a "$DEV/i18n-overlay/." "$ROOT/files/usr/share/g68/i18n-overlay/"
+	say "中文覆盖数据已放置: files/usr/share/g68/i18n-overlay/（$(cd "$DEV/i18n-overlay" && find . -type f | wc -l) 个文件）"
+fi
+
 # ---------- 7.6) 设备内核配置对齐（移植 immortalwrt 已验证配置）----------
 if [ -f "$DEV/kernel-config" ]; then
 	KCONF="$ROOT/target/linux/rockchip/armv8/config-6.6"

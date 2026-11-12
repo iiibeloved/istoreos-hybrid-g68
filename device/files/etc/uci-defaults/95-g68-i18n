@@ -1,0 +1,4 @@
+#!/bin/sh
+[ -x /usr/bin/g68-i18n ] && /usr/bin/g68-i18n apply >/dev/null 2>&1
+/etc/init.d/g68-i18n enable 2>/dev/null || true
+exit 0

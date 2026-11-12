@@ -42,21 +42,27 @@ echo
 [ "$FAIL" -gt 0 ] && { echo "自检失败：$FAIL 项"; exit 1; }
 echo "自检全部通过 ✅"
 
-echo "== 4. device/files 投递完整性 =="
+echo "== 4. 自定义文件 / 中文覆盖投递 =="
 if [ -d "$DEV/files" ]; then
-	count=0
 	for f in $(cd "$DEV/files" && find . -type f | sed 's|^\./||'); do
-		count=$((count+1))
-		if cmp -s "$DEV/files/$f" "$ROOT/files/$f"; then
-			ok "files/$f"
-		else
-			bad "files/$f 未投递或内容不一致"
-		fi
+		cmp -s "$DEV/files/$f" "$ROOT/files/$f" && ok "files/$f" || bad "files/$f 未投递或内容不一致"
 	done
-	[ "$count" -gt 0 ] || bad "device/files 为空"
-else
-	ok "device/files 不存在（跳过）"
 fi
+if [ -d "$DEV/i18n-overlay" ]; then
+	cnt=0
+	for f in $(cd "$DEV/i18n-overlay" && find . -type f | sed 's|^\./||'); do
+		cnt=$((cnt+1))
+		cmp -s "$DEV/i18n-overlay/$f" "$ROOT/files/usr/share/g68/i18n-overlay/$f" && ok "i18n-overlay/$f" || bad "i18n-overlay/$f 未投递"
+	done
+	[ "$cnt" -gt 0 ] || bad "i18n-overlay 为空"
+else
+	bad "缺 device/i18n-overlay"
+fi
+# manifest 每行必须能找到对应 overlay 文件
+while IFS=$(printf '\t') read -r pkg path; do
+	case "$pkg" in ''|\#*) continue ;; esac
+	[ -f "$DEV/i18n-overlay/$path" ] || bad "manifest 指向不存在的覆盖: $path"
+done < "$DEV/i18n-manifest" 2>/dev/null || true
 
 echo "== 6. 内核配置对齐（Realtek DSA / RTL8367S）=="
 KCONF="$ROOT/target/linux/rockchip/armv8/config-6.6"

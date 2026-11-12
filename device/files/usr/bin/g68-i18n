@@ -1,0 +1,43 @@
+#!/bin/sh
+# =============================================================================
+#  G68 中文覆盖投递器
+#  只在「对应 LuCI 应用已安装」时，才把 /usr/share/g68/i18n-overlay/ 下的
+#  中文覆盖文件复制到 rootfs 实际位置。
+#  这样：
+#   - 应用未安装 → 不产生幽灵菜单/孤儿文件；
+#   - 用户从 iStoreOS 商城安装应用后，重启（或手动执行 g68-i18n apply）即恢复中文。
+# =============================================================================
+OVERLAY=/usr/share/g68/i18n-overlay
+MANIFEST=/usr/share/g68/i18n-manifest
+INFO=/usr/lib/opkg/info
+
+pkg_installed() {
+	[ -f "$INFO/$1.control" ] || [ -f "$INFO/$1.list" ] || opkg list-installed 2>/dev/null | grep -q "^$1 "
+}
+
+apply_all() {
+	applied=0; skipped=0
+	while IFS=$(printf '\t') read -r pkg path; do
+		case "$pkg" in ''|\#*) continue ;; esac
+		if [ ! -f "$OVERLAY/$path" ]; then continue; fi
+		if pkg_installed "$pkg"; then
+			mkdir -p "/$(dirname "$path")"
+			cp -f "$OVERLAY/$path" "/$path" && applied=$((applied+1))
+		else
+			# 应用已卸载/未安装：删掉旧的中文覆盖，避免残留
+			[ -f "/$path" ] && rm -f "/$path"
+			skipped=$((skipped+1))
+		fi
+	done < "$MANIFEST"
+	echo "g68-i18n: 已投递 $applied 个文件，跳过 $skipped 项（对应应用未安装）"
+}
+
+case "${1:-apply}" in
+	apply) apply_all ;;
+	status)
+		while IFS=$(printf '\t') read -r pkg path; do
+			case "$pkg" in ''|\#*) continue ;; esac
+			if pkg_installed "$pkg"; then echo "[已安装] $pkg -> $path"; else echo "[未安装] $pkg"; fi
+		done < "$MANIFEST" ;;
+	*) echo "用法: g68-i18n apply|status" >&2; exit 1 ;;
+esac

@@ -1,0 +1,5 @@
+#!/bin/sh /etc/rc.common
+# 开机时按「已安装应用」重新投递中文覆盖（用户从商城装完应用后重启即生效）
+START=95
+start() { [ -x /usr/bin/g68-i18n ] && /usr/bin/g68-i18n apply >/dev/null 2>&1; }
+stop() { :; }
