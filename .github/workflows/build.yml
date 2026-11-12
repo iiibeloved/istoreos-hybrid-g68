@@ -160,7 +160,11 @@ jobs:
 
           set -eu
 
-          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          for i in 1 2 3; do
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos && break \
+            || { echo "::warning::克隆 iStoreOS 失败（第 $i 次），20s 后重试"; rm -rf istoreos; sleep 20; }
+        done
+        [ -d istoreos/.git ] || { echo "::error::iStoreOS 克隆失败（3 次）"; exit 1; }
 
           git -C istoreos rev-parse HEAD > upstream.commit
 
@@ -350,7 +354,11 @@ jobs:
 
           set -eu
 
-          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          for i in 1 2 3; do
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos && break \
+            || { echo "::warning::克隆 iStoreOS 失败（第 $i 次），20s 后重试"; rm -rf istoreos; sleep 20; }
+        done
+        [ -d istoreos/.git ] || { echo "::error::iStoreOS 克隆失败（3 次）"; exit 1; }
 
           sh scripts/apply-device.sh istoreos >/dev/null
 
@@ -442,7 +450,11 @@ jobs:
 
           set -eu
 
-          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos
+          for i in 1 2 3; do
+          git clone --depth 1 -b "$ISTOREOS_BRANCH" "$ISTOREOS_URL" istoreos && break \
+            || { echo "::warning::克隆 iStoreOS 失败（第 $i 次），20s 后重试"; rm -rf istoreos; sleep 20; }
+        done
+        [ -d istoreos/.git ] || { echo "::error::iStoreOS 克隆失败（3 次）"; exit 1; }
 
           sh scripts/apply-device.sh istoreos
 
