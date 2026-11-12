@@ -19,9 +19,7 @@ for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpc
 done
 
 echo "== 2. 内核补丁（XPCS / SGMII 2.5G）=="
-# 注意：912（combphy sgmii-mac-sel）已移除 —— iStoreOS 6.6.144 内核中该文件上下文已变，
-# 补丁 2 个 hunk 冲突；本板 2.5G 走 xpcs（911）+ dwmac（910/913）路径，无需该补丁。
-for p in 910 911 913; do
+for p in 910 911 912 913; do
 	ls "$ROOT/target/linux/rockchip/patches-6.6/${p}-"*.patch >/dev/null 2>&1 && ok "内核补丁 ${p}-*" || bad "缺内核补丁 ${p}-*"
 done
 
@@ -53,3 +51,12 @@ else
 	ok "device/files 不存在（跳过）"
 fi
 
+echo "== 6. 内核配置对齐（Realtek DSA / RTL8367S）=="
+KCONF="$ROOT/target/linux/rockchip/armv8/config-6.6"
+if [ -f "$KCONF" ]; then
+	for sym in CONFIG_NET_DSA_REALTEK=y CONFIG_NET_DSA_REALTEK_MDIO=y CONFIG_NET_DSA_REALTEK_RTL8365MB=y CONFIG_NET_DSA_TAG_RTL8_4=y; do
+		grep -qx "$sym" "$KCONF" && ok "内核配置 $sym" || bad "缺少内核配置 $sym"
+	done
+else
+	bad "找不到 $KCONF"
+fi

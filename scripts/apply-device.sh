@@ -133,6 +133,20 @@ if [ -d "$DEV/files" ]; then
 	say "自定义文件已放置到 $ROOT/files/（$(cd "$DEV/files" && find . -type f | wc -l) 个文件）"
 fi
 
+# ---------- 7.6) 设备内核配置对齐（移植 immortalwrt 已验证配置）----------
+if [ -f "$DEV/kernel-config" ]; then
+	KCONF="$ROOT/target/linux/rockchip/armv8/config-6.6"
+	[ -f "$KCONF" ] || { say "警告: 找不到 $KCONF，跳过内核配置对齐"; }
+	if [ -f "$KCONF" ]; then
+		if grep -q "G68 设备内核配置" "$KCONF"; then
+			say "内核配置已对齐（跳过）"
+		else
+			{ echo ""; echo "# --- G68 设备内核配置（来自 immortalwrt 基线）---"; cat "$DEV/kernel-config"; } >> "$KCONF"
+			say "已向 config-6.6 追加 G68 内核配置（RTL8367S DSA 等）"
+		fi
+	fi
+fi
+
 # ---------- 8) 核心功能守卫 ----------
 sh "$HERE/scripts/verify-maskrom.sh" "$ROOT" || die "长按 Reset→MaskROM 核心功能校验失败"
 say "完成（overlay-only，u-boot $UV，核心功能守卫通过）"
