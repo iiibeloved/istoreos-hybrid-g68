@@ -19,7 +19,9 @@ for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpc
 done
 
 echo "== 2. 内核补丁（XPCS / SGMII 2.5G）=="
-for p in 910 911 912 913; do
+# 注意：912（combphy sgmii-mac-sel）已移除 —— iStoreOS 6.6.144 内核中该文件上下文已变，
+# 补丁 2 个 hunk 冲突；本板 2.5G 走 xpcs（911）+ dwmac（910/913）路径，无需该补丁。
+for p in 910 911 913; do
 	ls "$ROOT/target/linux/rockchip/patches-6.6/${p}-"*.patch >/dev/null 2>&1 && ok "内核补丁 ${p}-*" || bad "缺内核补丁 ${p}-*"
 done
 
