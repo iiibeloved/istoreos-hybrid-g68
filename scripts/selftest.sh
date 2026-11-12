@@ -19,8 +19,15 @@ for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpc
 done
 
 echo "== 2. 内核补丁（XPCS / SGMII 2.5G）=="
+# 自动枚举：device/kernel-patches 下的每个补丁都必须被投递（增删补丁不再需要改自检）
+for f in "$DEV"/kernel-patches/*.patch; do
+	[ -f "$f" ] || continue
+	base=$(basename "$f")
+	ls "$ROOT/target/linux/rockchip/patches-6.6/$base" >/dev/null 2>&1 && ok "内核补丁 $base" || bad "缺内核补丁 $base"
+done
+# 关键功能补丁（XPCS / SGMII 2.5G / dwmac）必须存在
 for p in 910 911 913; do
-	ls "$ROOT/target/linux/rockchip/patches-6.6/${p}-"*.patch >/dev/null 2>&1 && ok "内核补丁 ${p}-*" || bad "缺内核补丁 ${p}-*"
+	ls "$ROOT/target/linux/rockchip/patches-6.6/${p}-"*.patch >/dev/null 2>&1 && ok "关键补丁 ${p}-*" || bad "缺关键补丁 ${p}-*"
 done
 
 echo "== 3. 构建系统插入 =="

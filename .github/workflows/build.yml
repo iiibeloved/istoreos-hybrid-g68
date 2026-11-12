@@ -179,13 +179,13 @@ jobs:
 
       - name: 应用 G68 设备层
 
-        run: sh scripts/apply-device.sh istoreos 2>&1 | tee apply-device.log
+        run: set -o pipefail; sh scripts/apply-device.sh istoreos 2>&1 | tee apply-device.log
 
 
 
       - name: 静态自检
 
-        run: sh scripts/selftest.sh istoreos 2>&1 | tee selftest.log
+        run: set -o pipefail; sh scripts/selftest.sh istoreos 2>&1 | tee selftest.log
 
 
 
