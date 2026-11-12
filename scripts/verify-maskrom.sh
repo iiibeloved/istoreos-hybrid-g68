@@ -12,19 +12,26 @@
 #    verify-maskrom.sh <iStoreOS源码根目录> [--built]
 # =============================================================================
 set -eu
-ROOT="${1:?用法: verify-maskrom.sh <iStoreOS源码根目录> [--built]}"
-MODE="applied"
+if [ "${1:-}" = "--repo" ]; then
+	ROOT=""
+	MODE="repo"
+else
+	ROOT="${1:?用法: verify-maskrom.sh <iStoreOS源码根目录>|--repo [--built]}"
+	MODE="applied"
+fi
 [ "${2:-}" = "--built" ] && MODE="built"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 DEV="$HERE/device"
-UB="$ROOT/package/boot/uboot-rockchip"
+UB="${ROOT:+$ROOT/package/boot/uboot-rockchip}"
 FAIL=0
 ok()  { printf '  [OK]   %s\n' "$*"; }
 bad() { printf '  [FAIL] %s\n' "$*"; FAIL=$((FAIL+1)); }
 
 echo "== [guard] 投递方式：overlay-only =="
 if [ -d "$DEV/uboot/patches" ]; then bad "存在 device/uboot/patches（本项目规定只用 overlay，不允许 patch 投递）"; else ok "无 u-boot patch 目录"; fi
-ls "$UB"/patches-* >/dev/null 2>&1 && bad "iStoreOS 树中出现 patches-*（patch 投递被启用）" || ok "iStoreOS 树无 patches-*"
+if [ -n "$ROOT" ]; then
+	ls "$UB"/patches-* >/dev/null 2>&1 && bad "iStoreOS 树中出现 patches-*（patch 投递被启用）" || ok "iStoreOS 树无 patches-*"
+fi
 
 O="$DEV/uboot/overlay"
 for f in arch/arm/mach-rockchip/boot_mode.c \
@@ -48,6 +55,13 @@ for kv in "CONFIG_ADC=y" "CONFIG_SARADC_ROCKCHIP=y" "CONFIG_SPL_ADC=y" "CONFIG_R
 	grep -q "^$kv" "$DEF" && ok "defconfig: $kv" || bad "defconfig 缺 $kv"
 done
 grep -q "CONFIG_DEFAULT_DEVICE_TREE=\"rk3568-nsy-g68-plus\"" "$DEF" && ok "defconfig: 默认 DTS" || bad "defconfig 默认 DTS 不对"
+
+if [ "$MODE" = "repo" ]; then
+	echo
+	[ "$FAIL" -gt 0 ] && { echo "核心功能守卫失败：$FAIL 项 —— overlay 内容不完整"; exit 1; }
+	echo "核心功能守卫通过 ✅（repo 模式：overlay 内容完整）"
+	exit 0
+fi
 
 echo "== [guard] 应用结果（$MODE）=="
 for f in arch/arm/mach-rockchip/boot_mode.c arch/arm/mach-rockchip/rk3568/rk3568.c arch/arm/mach-rockchip/Makefile arch/arm/dts/Makefile; do
