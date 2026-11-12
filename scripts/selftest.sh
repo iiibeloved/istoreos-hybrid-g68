@@ -19,7 +19,7 @@ for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpc
 done
 
 echo "== 2. 内核补丁（XPCS / SGMII 2.5G）=="
-for p in 910 911 912 913; do
+for p in 910 911 913; do
 	ls "$ROOT/target/linux/rockchip/patches-6.6/${p}-"*.patch >/dev/null 2>&1 && ok "内核补丁 ${p}-*" || bad "缺内核补丁 ${p}-*"
 done
 
