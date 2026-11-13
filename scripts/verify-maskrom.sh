@@ -9,7 +9,18 @@
 #    built   : 编译产物 u-boot-rockchip.bin 含按键路径字符串，且 .config 的寄存器地址正确
 #
 #  用法：
-#    verify-maskrom.sh <iStoreOS源码根目录> [--built]
+#    verify-maskrom.sh <iStoreOS源码根目录>|--repo [--built]
+#
+#  ── 投递机制证据（勿再质疑 overlay 是否生效）──────────────────────────────
+#  iStoreOS 的 package/boot/uboot-rockchip/Makefile 同时 include 了：
+#      include $(INCLUDE_DIR)/u-boot.mk
+#      include $(INCLUDE_DIR)/package.mk          ← 关键，很多 review 会漏掉这行
+#  而 include/package-defaults.mk 的 Build/Prepare/Default 第 66 行执行：
+#      [ ! -d ./src/ ] || $(CP) ./src/. $(PKG_BUILD_DIR)
+#  因此我们把改动文件放进 $UB/src/ 后，会在解压 tarball 之后被拷入构建目录，
+#  属于 overlay-only 投递，无需任何 u-boot .patch。
+#  实证：构建产物（u-boot-rockchip.bin）中可 strings 出仅在 boot_mode.c 新增的字面量
+#        "download key pressed" —— 若 overlay 未生效，该字符串不可能出现。
 # =============================================================================
 set -eu
 if [ "${1:-}" = "--repo" ]; then
@@ -76,7 +87,14 @@ if [ "$MODE" = "built" ]; then
 	[ -n "$BIN" ] || BIN=$(find "$ROOT/staging_dir" -name 'nsy-g68-plus-rk3568-u-boot-rockchip.bin' | head -1 || true)
 	if [ -n "$BIN" ]; then
 		ok "产物: $BIN ($(stat -c%s "$BIN") 字节)"
-		strings "$BIN" | grep -q "download key pressed" && ok "二进制含 download key pressed" || bad "二进制缺 download key pressed"
+		# 断言依据（历史实证，勿改为仅看 .config）：
+		#   1) "download key pressed" 是 boot_mode.c 新增的字面量，恒随 overlay 进入二进制
+		#      → 若缺失，说明 overlay 没生效（而不是 ADC 问题）；
+		#   2) "adc_channel_single_shot" 是 SPL 中真实存在的符号字符串；
+		#      历史事故中曾因 defconfig 缺 CONFIG_ADC/SARADC_ROCKCHIP/SPL_ADC 而 strings 查不到，
+		#      据此定位后补全 defconfig 即通过；启用后 run#24 / run#37 的产物均可检出。
+		#      因此两者配合可区分「overlay 未生效」与「ADC 未启用」两类故障。
+		strings "$BIN" | grep -q "download key pressed" && ok "二进制含 download key pressed" || bad "二进制缺 download key pressed（overlay 可能未生效）"
 		strings "$BIN" | grep -q "adc_channel_single_shot" && ok "二进制含 adc_channel_single_shot" || bad "二进制缺 adc_channel_single_shot（ADC 未启用）"
 	else
 		bad "未找到 G68 的 u-boot-rockchip.bin"
