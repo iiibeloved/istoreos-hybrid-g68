@@ -95,7 +95,7 @@ if [ -n "$COMPHY_PATCH" ]; then
 		warn "检测到 combphy 补丁，当前内核版本 ${KV:-未知}，需确认不会与上游冲突"
 	fi
 else
-	ok "无 combphy 补丁（符合 6.6.144 起「删除 912」的历史结论）"
+	warn "无 combphy 补丁（912 已删除，但 iStoreOS 是否内置 sgmii-mac-sel 待真机验证；见下方提示）"
 fi
 
 if dts_has 'sgmii-mac-sel'; then
