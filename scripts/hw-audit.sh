@@ -42,6 +42,20 @@ pkg_has() { grep -qE "^CONFIG_PACKAGE_$1=y$" "$CFG" 2>/dev/null; }
 k_has()   { grep -qE "^$1=y$" "$KCFG" 2>/dev/null; }
 exempted(){ [ -f "$EX" ] && grep -qiE "^$1[[:space:]]" "$EX"; }
 
+# 可选：iStoreOS 源码树（prepare 阶段存在），用于读取内核版本与校验补丁一致性
+ROOT="${HW_ROOT:-istoreos}"
+KV=""
+if [ -f "$ROOT/include/kernel-6.6" ]; then
+	LV=$(sed -n 's/^LINUX_VERSION-6\.6 = //p' "$ROOT/include/kernel-6.6" | head -1)
+	[ -n "$LV" ] && KV="6.6$LV"
+fi
+if [ -z "$KV" ]; then
+	warn "未能读取 iStoreOS 内核版本（$ROOT/include/kernel-6.6），版本相关判定降级为警告"
+fi
+ver_ge() { [ -n "$KV" ] && awk -v a="$KV" -v b="$1" 'BEGIN{split(a,x,".");split(b,y,".");for(i=1;i<=3;i++){if(x[i]+0>y[i]+0)exit 0;if(x[i]+0<y[i]+0)exit 1}exit 0}'; }
+patches_grep() { grep -lE "$1" "$DEV"/kernel-patches/*.patch 2>/dev/null || true; }
+
+
 echo "== [hw-audit] 输入 =="
 echo "  dts: $DTS"
 echo "  config: $CFG ($(grep -c '^CONFIG_PACKAGE_.*=y$' "$CFG" 2>/dev/null || echo 0) 包)"
@@ -60,17 +74,40 @@ else
 fi
 
 echo "== H4 2.5G / XPCS =="
+XPCS_PATCH=$(patches_grep 'xpcs')
 if dts_has 'xpcs'; then
-	if ls "$DEV"/kernel-patches/911-*.patch >/dev/null 2>&1; then
-		ok "dts 含 xpcs，且存在 911 xpcs 补丁"
+	if [ -n "$XPCS_PATCH" ]; then
+		ok "dts 含 xpcs，补丁按内容命中: $(basename "$XPCS_PATCH" | head -1)"
 	else
-		miss "dts 含 xpcs，但缺 device/kernel-patches/911-*.patch（内核不会生成 xpcs 节点）"
-	fi
-	if dts_has 'sgmii-mac-sel'; then
-		warn "dts 使用 rockchip,sgmii-mac-sel —— 需确认当前内核驱动已内置该属性（iStoreOS 6.6.144 已含）"
+		miss "dts 含 xpcs，但 device/kernel-patches 中无含 xpcs 的补丁（内核不会生成 xpcs 节点）"
 	fi
 else
 	warn "dts 未发现 xpcs 节点"
+fi
+
+# 历史事故：912-combphy 与 iStoreOS 6.6.144 冲突（hunk 1/4 FAILED），当时处理为「删除」而非修补。
+# 若再次出现 combphy 补丁，且内核版本 >= 6.6.144，说明重复投递，必须拦截。
+COMPHY_PATCH=$(patches_grep 'naneng-combphy')
+if [ -n "$COMPHY_PATCH" ]; then
+	if [ -n "$KV" ] && ver_ge 6.6.144; then
+		miss "检测到 combphy 补丁（$(basename "$COMPHY_PATCH" | head -1)），但内核 $KV 已内置 sgmii-mac-sel 支持 → 会再次 hunk 冲突，应删除该补丁"
+	else
+		warn "检测到 combphy 补丁，当前内核版本 ${KV:-未知}，需确认不会与上游冲突"
+	fi
+else
+	ok "无 combphy 补丁（符合 6.6.144 起「删除 912」的历史结论）"
+fi
+
+if dts_has 'sgmii-mac-sel'; then
+	if [ -n "$(patches_grep 'sgmii-mac-sel')" ]; then
+		ok "dts 使用 rockchip,sgmii-mac-sel，且由补丁提供"
+	elif [ -n "$KV" ] && ver_ge 6.6.144; then
+		ok "dts 使用 rockchip,sgmii-mac-sel，内核 $KV 已内置（无需补丁，912 已正确删除）"
+	elif [ -n "$KV" ]; then
+		miss "dts 使用 rockchip,sgmii-mac-sel，但内核 $KV < 6.6.144 且无补丁提供该属性"
+	else
+		warn "dts 使用 rockchip,sgmii-mac-sel，无法确认内核是否内置（版本未知）"
+	fi
 fi
 
 echo "== H7 按键进 MaskROM (adc-keys) =="
