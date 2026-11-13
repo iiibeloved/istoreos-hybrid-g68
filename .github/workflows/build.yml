@@ -395,7 +395,15 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          printf 'branch=%s\ncommit=%s\n' "$ISTOREOS_BRANCH" "$(git -C istoreos rev-parse HEAD)" > upstream.lock
+          {
+            printf 'branch=%s\n' "$ISTOREOS_BRANCH"
+            printf 'commit=%s\n' "$(git -C istoreos rev-parse HEAD)"
+            printf 'feeds:\n'
+            for d in istoreos/feeds/*/; do
+              [ -d "$d/.git" ] || continue
+              printf '  %s %s\n' "$(basename "$d")" "$(git -C "$d" rev-parse HEAD 2>/dev/null || echo unknown)"
+            done
+          } > upstream.lock
           git add upstream.lock
           git commit -m "chore: 记录已构建的 iStoreOS 上游 commit" || true
           git push || echo "::warning::upstream.lock 回写推送失败（检查 workflow 的 contents: write 权限）"

@@ -24,7 +24,5 @@ luci-app-control-weburl	usr/lib/lua/luci/view/weburl/weburl.htm
 luci-app-timecontrol	www/luci-static/resources/view/timecontrol/basic.js
 luci-app-timecontrol	www/luci-static/resources/view/timecontrol/log.js
 luci-app-timecontrol	usr/share/luci/menu.d/luci-app-timecontrol.json
-luci-app-store	usr/lib/lua/luci/controller/store.lua
-luci-app-store	usr/lib/lua/luci/view/store/main.htm
 luci-app-emmc-health	www/luci-static/resources/view/emmc-health.js
 luci-app-lan-scanner	www/luci-static/resources/view/lan-scanner.js
