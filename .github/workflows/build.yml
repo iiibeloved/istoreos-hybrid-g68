@@ -87,6 +87,8 @@ jobs:
         run: set -o pipefail; sh scripts/apply-device.sh istoreos 2>&1 | tee apply-device.log
       - name: 静态自检
         run: set -o pipefail; sh scripts/selftest.sh istoreos 2>&1 | tee selftest.log
+      - name: 硬件级内容审核（hw-audit，dts ↔ 驱动/配置）
+        run: sh scripts/hw-audit.sh
       - name: defconfig 合理性检查
         shell: bash
         run: |
