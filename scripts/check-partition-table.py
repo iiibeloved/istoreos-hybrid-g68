@@ -43,7 +43,7 @@ def main():
         print("  0x%02x  %10d  %10d  %8.1f" % (t, a, n, n * 512 / 1024 / 1024))
     if not parts:
         raise RuntimeError("分区表为空")
-    # userdata 是最大的分区（kernel 16 / rootfs 200 / rootfs_data 4096）
+    # userdata 是最大的分区（kernel 16 / rootfs 500 / rootfs_data 4096）
     userdata = max(parts, key=lambda x: x[2])[2] * 512
     want = expect * 1024 * 1024
     if abs(userdata - want) > 16 * 1024 * 1024:
