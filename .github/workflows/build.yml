@@ -41,7 +41,7 @@ env:
 jobs:
   # ---------- 上游变更检查（定时/手动均可，push 时跳过）----------
   check-upstream:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       commit: ${{ steps.c.outputs.commit }}
       changed: ${{ steps.c.outputs.changed }}
@@ -64,7 +64,7 @@ jobs:
   prepare:
     needs: check-upstream
     if: always() && (github.event_name == 'push' || needs.check-upstream.outputs.changed == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       commit: ${{ steps.c.outputs.commit }}
     steps:
@@ -186,7 +186,7 @@ jobs:
   uboot-check:
     needs: prepare
     if: always() && needs.prepare.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: 拉源码并应用设备层
@@ -254,7 +254,7 @@ jobs:
   build:
     needs: [ prepare, uboot-check ]
     if: always() && needs.prepare.result == 'success' && needs.uboot-check.result == 'success' && (inputs.stage == 'full' || github.event_name != 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: 拉源码并应用设备层
