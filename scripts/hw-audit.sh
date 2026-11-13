@@ -102,7 +102,13 @@ if dts_has 'sgmii-mac-sel'; then
 	if [ -n "$(patches_grep 'sgmii-mac-sel')" ]; then
 		ok "dts 使用 rockchip,sgmii-mac-sel，且由补丁提供"
 	elif [ -n "$KV" ] && ver_ge 6.6.144; then
-		ok "dts 使用 rockchip,sgmii-mac-sel，内核 $KV 已内置（无需补丁，912 已正确删除）"
+		# 注意：此处不能断言 iStoreOS 已内置该属性。
+		# 912 被删除的依据只是「hunk 1/4 与 iStoreOS 源码上下文冲突」，
+		# 而 hunk 2/3（parse_dt 新增属性读取）是能应用成功的 —— 说明 iStoreOS
+		# 的 combphy 可能并没有 sgmii-mac-sel 支持。必须真机验证 2.5G 口：
+		#   ethtool eth1 | grep Speed   → 2500Mb/s 才证明链路成立；
+		#   若只有 1000Mb/s 或链路不通，需要按 iStoreOS 6.6.144 源码重建 912 等价补丁。
+		warn "dts 使用 rockchip,sgmii-mac-sel，但无补丁提供，且 iStoreOS $KV 是否内置未经证实 → 必须真机验证 gmac1 2.5G；必要时重建 912 适配补丁"
 	elif [ -n "$KV" ]; then
 		miss "dts 使用 rockchip,sgmii-mac-sel，但内核 $KV < 6.6.144 且无补丁提供该属性"
 	else
