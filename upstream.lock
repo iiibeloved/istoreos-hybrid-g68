@@ -1,4 +1,4 @@
 # 由 CI 写入（state 分支，main 受保护）
 branch=istoreos-24.10
-commit=
+commit=45f8da64fc38cf31096659f5e19f3e43a92cc9bd
 feeds:
