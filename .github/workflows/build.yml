@@ -336,6 +336,7 @@ jobs:
           SHA=$(sha256sum "$(basename "$IMG")" | awk '{print $1}')
           CNT=$(grep -h ' - ' istoreos/bin/targets/rockchip/armv8/*.manifest 2>/dev/null | wc -l)
           cat istoreos/bin/targets/rockchip/armv8/*.manifest > ./packages.manifest
+          sha256sum "$(basename "$IMG")" > sha256sums
           echo "IMG=$(basename "$IMG")" >> "$GITHUB_ENV"
           echo "SHA=$SHA" >> "$GITHUB_ENV"
           echo "PKGCOUNT=$CNT" >> "$GITHUB_ENV"
@@ -386,8 +387,8 @@ jobs:
             echo ""
             echo "> 若长按无效，可用短接触点法兜底（BROM 模式，loader 相同）"
           } > notes.md
-          gh release create "$TAG" *.img.gz *.sha256 packages.manifest --title "G68 iStoreOS 杂交固件 $TAG" --notes-file notes.md || \
-            gh release upload "$TAG" *.img.gz *.sha256 packages.manifest --clobber
+          gh release create "$TAG" *.img.gz sha256sums packages.manifest --title "G68 iStoreOS 杂交固件 $TAG" --notes-file notes.md || \
+            gh release upload "$TAG" *.img.gz sha256sums packages.manifest --clobber
       - name: 回写 upstream.lock
         if: success()
         env:
