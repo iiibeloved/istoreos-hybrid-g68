@@ -1,0 +1,56 @@
+#!/bin/sh /etc/rc.common
+# =============================================================================
+#  G68 网络端口映射（每次启动都校正，幂等）
+#
+#  背景：iStoreOS 基座 02_network 没有 nsy,g68-plus 分支；且 rootfs_data 若
+#  保留旧配置，uci-defaults 不会再次执行 → 网络可能永久停留在“lan=eth0/dhcp、
+#  无 wan”的错误状态。本脚本在 network 启动前（START=19）校正一次。
+#
+#  映射（与 immortalwrt standalone 一致）：
+#    LAN=eth0（SGMII 交换机，192.168.100.1/24 + DHCP）
+#    WAN=eth1（RGMII RTL8211F，靠电源网口，DHCP 客户端）
+# =============================================================================
+START=19
+
+start() {
+	BOARD=$(cat /tmp/sysinfo/board_name 2>/dev/null)
+	[ "$BOARD" = "nsy,g68-plus" ] || return 0
+
+	LOG=/etc/g68-network.log
+	[ -f "$LOG" ] || : > "$LOG"
+
+	LAN_DEV=$(uci -q get network.lan.device)
+	LAN_PROTO=$(uci -q get network.lan.proto)
+	WAN_DEV=$(uci -q get network.wan.device)
+
+	# 已经正确则直接返回（避免每次重启都写配置）
+	if [ "$LAN_DEV" = "eth0" ] && [ "$LAN_PROTO" = "static" ] && [ "$WAN_DEV" = "eth1" ]; then
+		return 0
+	fi
+
+	for sect in network.lan network.wan network.wan6 dhcp.lan; do
+		uci -q delete "$sect" 2>/dev/null || true
+	done
+	uci -q batch <<'UCIEOF'
+set network.lan=interface
+set network.lan.device='eth0'
+set network.lan.proto='static'
+set network.lan.ipaddr='192.168.100.1'
+set network.lan.netmask='255.255.255.0'
+set network.lan.ip6assign='60'
+set network.wan=interface
+set network.wan.device='eth1'
+set network.wan.proto='dhcp'
+set network.wan6=interface
+set network.wan6.device='eth1'
+set network.wan6.proto='dhcpv6'
+commit network
+set dhcp.lan=dhcp
+set dhcp.lan.interface='lan'
+set dhcp.lan.start='100'
+set dhcp.lan.limit='150'
+set dhcp.lan.leasetime='12h'
+commit dhcp
+UCIEOF
+	echo "$(date '+%F %T') 已校正 lan=eth0(static 192.168.100.1) / wan=eth1(dhcp)（原 lan.dev=$LAN_DEV proto=$LAN_PROTO wan.dev=$WAN_DEV）" >> "$LOG"
+}
