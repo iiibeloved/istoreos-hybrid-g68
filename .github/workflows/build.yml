@@ -48,12 +48,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: c
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           C=$(git ls-remote "$ISTOREOS_URL" "refs/heads/$ISTOREOS_BRANCH" | awk '{print $1}')
           echo "upstream commit: $C"
           echo "commit=$C" >> "$GITHUB_OUTPUT"
-          OLD=$(sed -n 's/^commit=//p' upstream.lock | head -1)
+          OLD=""
+          for ref in state main; do
+            content=$(gh api "repos/$GITHUB_REPOSITORY/contents/upstream.lock?ref=$ref" --jq '.content' 2>/dev/null || true)
+            [ -n "$content" ] || continue
+            OLD=$(echo "$content" | base64 -d | sed -n 's/^commit=//p' | head -1)
+            [ -n "$OLD" ] && break
+          done
           if [ -n "$OLD" ] && [ "$OLD" = "$C" ] && [ "${{ github.event_name }}" = "schedule" ]; then
             echo "上游未变化，跳过构建"
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -406,8 +414,9 @@ jobs:
             done
           } > upstream.lock
           git add upstream.lock
-          git commit -m "chore: 记录已构建的 iStoreOS 上游 commit" || true
-          git push || echo "::warning::upstream.lock 回写推送失败（检查 workflow 的 contents: write 权限）"
+          git commit -m "chore: 记录已构建的 iStoreOS 上游 commit [skip ci]" || true
+          # main 受保护（protected branch hook 会拒绝 GITHUB_TOKEN），改推 state 分支
+          git push --force origin HEAD:state || echo "::warning::upstream.lock 回写推送失败（state 分支）"
           echo "---- upstream.lock ----"; cat upstream.lock
       - name: 失败时自动开 issue（同类复用，不重复开）
         if: failure()

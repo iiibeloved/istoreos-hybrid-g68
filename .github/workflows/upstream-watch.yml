@@ -39,7 +39,13 @@ jobs:
             sleep 10
           done
           [ -n "${C:-}" ] || { echo "::error::无法获取上游 commit"; exit 1; }
-          OLD=$(sed -n 's/^commit=//p' upstream.lock | head -1 || true)
+          OLD=""
+          for ref in state main; do
+            content=$(gh api "repos/$GITHUB_REPOSITORY/contents/upstream.lock?ref=$ref" --jq '.content' 2>/dev/null || true)
+            [ -n "$content" ] || continue
+            OLD=$(echo "$content" | base64 -d | sed -n 's/^commit=//p' | head -1 || true)
+            [ -n "$OLD" ] && break
+          done
           echo "upstream=$C"
           echo "lock=${OLD:-<空>}"
 
