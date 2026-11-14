@@ -23,25 +23,26 @@ if [ "$BOARD" != "nsy,g68-plus" ]; then
 	exit 0
 fi
 
+# 容忍缺失的节：逐条删除（失败不阻断），再做批量写入
+for sect in network.lan network.wan network.wan6 dhcp.lan; do
+	uci -q delete "$sect" 2>/dev/null || true
+done
+
 uci -q batch <<'UCIEOF'
-delete network.lan
 set network.lan=interface
 set network.lan.device='eth0'
 set network.lan.proto='static'
 set network.lan.ipaddr='192.168.100.1'
 set network.lan.netmask='255.255.255.0'
 set network.lan.ip6assign='60'
-delete network.wan
 set network.wan=interface
 set network.wan.device='eth1'
 set network.wan.proto='dhcp'
-delete network.wan6
 set network.wan6=interface
 set network.wan6.device='eth1'
 set network.wan6.proto='dhcpv6'
 commit network
 
-delete dhcp.lan
 set dhcp.lan=dhcp
 set dhcp.lan.interface='lan'
 set dhcp.lan.start='100'
