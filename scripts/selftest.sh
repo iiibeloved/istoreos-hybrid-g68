@@ -73,3 +73,20 @@ if [ -f "$KCONF" ]; then
 else
 	bad "找不到 $KCONF"
 fi
+
+echo "== 7. 板级网络映射（G68 LAN=eth0 / WAN=eth1）=="
+NET02="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network"
+if [ -f "$NET02" ]; then
+	grep -q 'nsy,g68-plus' "$NET02" && ok "02_network 含 nsy,g68-plus 分支" || bad "02_network 缺 nsy,g68-plus 分支（hybrid 会落默认 lan=eth0/dhcp、无 wan）"
+	grep -q 'ucidef_set_interfaces_lan_wan "eth0" "eth1"' "$NET02" && ok "02_network 映射 LAN=eth0 / WAN=eth1" || bad "02_network 映射不正确"
+else
+	bad "找不到 $NET02"
+fi
+NETFIX="$ROOT/files/etc/uci-defaults/95-g68-network"
+if [ -f "$NETFIX" ]; then
+	ok "uci-defaults 网络兜底脚本已投递"
+	[ -x "$NETFIX" ] && ok "网络脚本可执行" || bad "网络脚本缺少可执行位"
+	sh -n "$NETFIX" && ok "网络脚本语法" || bad "网络脚本语法错误"
+else
+	bad "缺 files/etc/uci-defaults/95-g68-network（网络兜底）"
+fi

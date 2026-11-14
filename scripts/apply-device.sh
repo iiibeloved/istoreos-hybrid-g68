@@ -133,6 +133,27 @@ if [ -d "$DEV/files" ]; then
 	say "自定义文件已放置到 $ROOT/files/（$(cd "$DEV/files" && find . -type f | wc -l) 个文件）"
 fi
 
+# ---------- 7.52) 板级网络映射（iStoreOS 02_network 缺 nsy,g68-plus 分支）----------
+NET02="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network"
+if [ -f "$NET02" ]; then
+	if grep -q 'nsy,g68-plus' "$NET02"; then
+		say "02_network 已含 nsy,g68-plus 分支（跳过）"
+	else
+		awk 'BEGIN{ins=0}
+		{
+			if (!ins && $0 == "\t*)") {
+				printf "\tnsy,g68-plus)\n\t\tucidef_set_interfaces_lan_wan \"eth0\" \"eth1\"\n\t\t;;\n"
+				ins=1
+			}
+			print
+		}' "$NET02" > "$NET02.tmp" && mv "$NET02.tmp" "$NET02"
+		grep -q 'nsy,g68-plus' "$NET02" || die "02_network 结构变化：未找到默认分支，无法插入 G68 映射"
+		say "02_network: 已插入 nsy,g68-plus → LAN=eth0 / WAN=eth1（board.json 也会正确生成）"
+	fi
+else
+	say "警告: 找不到 $NET02，跳过板级网络映射（uci-defaults 仍会兜底）"
+fi
+
 # ---------- 7.55) 中文覆盖数据（按已安装应用条件投递）----------
 if [ -d "$DEV/i18n-overlay" ]; then
 	mkdir -p "$ROOT/files/usr/share/g68/i18n-overlay"
