@@ -1,86 +1,50 @@
 #!/bin/sh /etc/rc.common
 # =============================================================================
-#  G68 网络端口映射（每次启动按硬件识别，幂等）
-#
-#  gmac0 = fe2a0000（RGMII + RTL8211F，靠近电源的 WAN 口）
-#  gmac1 = fe010000（SGMII fixed-link，接 RTL8367S 交换芯片，LAN 交换机）
-#
-#  dts 的 ethernet0/ethernet1 aliases 不被 dwmac-rk 稳定采用，不同内核
-#  probe 顺序可能让 eth0/eth1 互换；iStoreOS 基座默认又只生成
-#  lan=eth0(dhcp)、无 wan → 真机表现为“直连无地址 / 接上级路由变交换机”。
-#
-#  本脚本按 /sys/class/net/*/device 的物理地址识别 gmac0/gmac1：
-#    WAN = gmac0（dhcp 客户端）
-#    LAN = gmac1（静态 192.168.100.1/24 + DHCP 服务）
-#  若 RTL8367S 被 DSA 接管（出现 lan1..lan4），LAN 用 br-lan 桥接这些端口。
+#  诊断用：把全部以太网口桥进 br-lan，强制 192.168.100.1/24 + DHCP
+#  目的：不管 WAN/LAN 映射与 SGMII 链路是否正常，只要能连上任一口就能进系统
+#  注意：本版无 WAN/NAT，仅用于定位问题
 # =============================================================================
 START=19
+LOG=/etc/g68-network.log
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 
 start() {
-	BOARD=$(cat /tmp/sysinfo/board_name 2>/dev/null)
-	[ "$BOARD" = "nsy,g68-plus" ] || return 0
-
-	LOG=/etc/g68-network.log
 	[ -f "$LOG" ] || : > "$LOG"
+	MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null)
+	log "diag mode, model='$MODEL'"
 
-	GMAC0=""; GMAC1=""
+	PORTS=""
 	for d in /sys/class/net/*; do
-		[ -e "$d/device" ] || continue
 		n=$(basename "$d")
-		path=$(readlink -f "$d/device" 2>/dev/null)
-		case "$path" in
-			*fe2a0000*) GMAC0="$n" ;;
-			*fe010000*) GMAC1="$n" ;;
-		esac
+		case "$n" in lo|br-*|docker*|veth*|dummy*|ifb*|tun*|tap*|sit*|wg*|ppp*|lan[0-9]*) continue ;; esac
+		PORTS="$PORTS $n"
 	done
-
-	DSA_PORTS=""
+	# DSA slave 口也加入
 	for p in lan1 lan2 lan3 lan4; do
-		[ -e "/sys/class/net/$p" ] && DSA_PORTS="$DSA_PORTS $p"
+		[ -e "/sys/class/net/$p" ] && PORTS="$PORTS $p"
 	done
-
-	if [ -z "$GMAC0" ] || [ -z "$GMAC1" ]; then
-		echo "$(date '+%F %T') 未识别到 gmac0/gmac1（gmac0=$GMAC0 gmac1=$GMAC1），跳过" >> "$LOG"
-		return 0
-	fi
-
-	WAN_DEV="$GMAC0"
-	if [ -n "$DSA_PORTS" ]; then LAN_DEV="br-lan"; else LAN_DEV="$GMAC1"; fi
-
-	if [ "$(uci -q get network.lan.device)" = "$LAN_DEV" ] \
-	   && [ "$(uci -q get network.lan.proto)" = "static" ] \
-	   && [ "$(uci -q get network.wan.device)" = "$WAN_DEV" ]; then
-		return 0
-	fi
+	log "bridging ports:$PORTS"
 
 	for sect in network.lan network.wan network.wan6 dhcp.lan network.brlan; do
 		uci -q delete "$sect" 2>/dev/null || true
 	done
 
-	if [ -n "$DSA_PORTS" ]; then
-		uci -q batch <<UCIEOF
+	uci -q batch <<UCIEOF
 set network.brlan=device
 set network.brlan.name='br-lan'
 set network.brlan.type='bridge'
 commit network
 UCIEOF
-		for p in $DSA_PORTS; do uci -q add_list network.brlan.ports="$p"; done
-		uci -q commit network
-	fi
+	for p in $PORTS; do uci -q add_list network.brlan.ports="$p"; done
+	uci -q commit network
 
 	uci -q batch <<UCIEOF
 set network.lan=interface
-set network.lan.device='$LAN_DEV'
+set network.lan.device='br-lan'
 set network.lan.proto='static'
 set network.lan.ipaddr='192.168.100.1'
 set network.lan.netmask='255.255.255.0'
-set network.lan.ip6assign='60'
-set network.wan=interface
-set network.wan.device='$WAN_DEV'
-set network.wan.proto='dhcp'
-set network.wan6=interface
-set network.wan6.device='$WAN_DEV'
-set network.wan6.proto='dhcpv6'
 commit network
 set dhcp.lan=dhcp
 set dhcp.lan.interface='lan'
@@ -90,5 +54,5 @@ set dhcp.lan.leasetime='12h'
 commit dhcp
 UCIEOF
 
-	echo "$(date '+%F %T') 校正: gmac0=$GMAC0(WAN) gmac1=$GMAC1(LAN) DSA='$DSA_PORTS' → lan=$LAN_DEV wan=$WAN_DEV" >> "$LOG"
+	log "br-lan ports=$PORTS lan=192.168.100.1"
 }
