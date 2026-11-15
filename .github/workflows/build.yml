@@ -120,16 +120,14 @@ jobs:
           head -20 /tmp/dropped.txt || true
           grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" /tmp/ours.config \
             || { echo "::error::defconfig 未选中 G68 设备"; exit 1; }
-            # DNS 变体断言：必须 dnsmasq-full 且关闭基座 dnsmasq（同装会 check_data_file_clashes）
-            grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' /tmp/ours.config \
-              || { echo "::error::dnsmasq-full 未生效"; grep -n "CONFIG_PACKAGE_dnsmasq" /tmp/ours.config || true; exit 1; }
-            if grep -q '^CONFIG_PACKAGE_dnsmasq=y$' /tmp/ours.config; then
-              echo "::error::基座 dnsmasq 被重新打开（# CONFIG_PACKAGE_dnsmasq is not set 未生效），将与 dnsmasq-full 冲突"
-              grep -n "CONFIG_PACKAGE_dnsmasq" /tmp/ours.config || true
+            # DNS 去重断言：以上游 dnsmasq 为准，dnsmasq-full 必须被排除
+            grep -q '^CONFIG_PACKAGE_dnsmasq=y$' /tmp/ours.config \
+              || { echo "::error::上游 dnsmasq 未选中"; grep -n "CONFIG_PACKAGE_dnsmasq" /tmp/ours.config || true; exit 1; }
+            if grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' /tmp/ours.config; then
+              echo "::error::dnsmasq-full 与上游 dnsmasq 冲突（去重规则：以上游为准）"
               exit 1
             fi
-            grep -q '^CONFIG_PACKAGE_dnsmasq-dhcpv6=y$' /tmp/ours.config && { echo "::error::dnsmasq-dhcpv6 未关闭"; exit 1; } || true
-            echo "[OK] DNS 变体: dnsmasq-full=y，基座 dnsmasq 已关闭"
+            echo "[OK] DNS: 使用上游 dnsmasq（dnsmasq-full 已按去重规则排除）"
       - name: 以上游包清单为基准去重（package-guard）
         shell: bash
         run: |
@@ -294,10 +292,9 @@ jobs:
           make defconfig 2>&1 | tail -20
           echo "=== 关键配置确认 ==="
           grep -E "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus|CONFIG_TARGET_KERNEL_PARTSIZE|CONFIG_TARGET_ROOTFS_PARTSIZE|CONFIG_PACKAGE_luci-app-store" .config || true
-          grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' .config || { echo "::error::dnsmasq-full 未生效"; exit 1; }
-          if grep -q '^CONFIG_PACKAGE_dnsmasq=y$' .config; then
-            echo "::error::基座 dnsmasq 被重新打开，安装阶段会与 dnsmasq-full 冲突"
-            grep -n "CONFIG_PACKAGE_dnsmasq" .config || true
+          grep -q '^CONFIG_PACKAGE_dnsmasq=y$' .config || { echo "::error::上游 dnsmasq 未选中"; exit 1; }
+          if grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' .config; then
+            echo "::error::dnsmasq-full 与上游 dnsmasq 冲突（去重规则：以上游为准）"
             exit 1
           fi
       - name: 缓存 dl
