@@ -74,21 +74,17 @@ else
 	bad "找不到 $KCONF"
 fi
 
-echo "== 7. 板级网络映射（G68 LAN=gmac1 / WAN=gmac0，按硬件识别）=="
+echo "== 7. 网络：DSA 交换机（lan1-4 / wan）=="
+KDTSX="$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3568-nsy-g68-plus.dts"
+if [ -f "$KDTSX" ]; then
+	grep -q 'switch@29' "$KDTSX" && ok "dts 含 DSA switch@29" || bad "dts 缺 DSA switch@29"
+	grep -q 'label = "wan"' "$KDTSX" && ok "dts 含 wan 端口" || bad "dts 缺 wan 端口"
+	grep -q 'ethernet = <&gmac0>' "$KDTSX" && ok "DSA CPU 口 = gmac0" || bad "DSA CPU 口不是 gmac0"
+else
+	bad "找不到 $KDTSX"
+fi
 NET02="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network"
-if [ -f "$NET02" ]; then
-	grep -q 'nsy,g68-plus' "$NET02" && ok "02_network 含 nsy,g68-plus 分支" || bad "02_network 缺 nsy,g68-plus 分支"
-else
-	bad "找不到 $NET02"
-fi
-NETINIT="$ROOT/files/etc/init.d/g68-network"
-if [ -f "$NETINIT" ]; then
-	ok "常驻网络校正脚本已投递"
-	[ -x "$NETINIT" ] && ok "网络脚本可执行" || bad "网络脚本缺少可执行位"
-	sh -n "$NETINIT" && ok "网络脚本语法" || bad "网络脚本语法错误"
-	grep -q 'fe2a0000' "$NETINIT" && grep -q 'fe010000' "$NETINIT" && ok "脚本按 gmac0/gmac1 物理地址识别" || bad "脚本未按物理地址识别端口"
-else
-	bad "缺 files/etc/init.d/g68-network"
-fi
-NETRC="$ROOT/files/etc/rc.d/S19g68-network"
-[ -L "$NETRC" ] && ok "rc.d 开机自启链接" || bad "缺 rc.d/S19g68-network 自启链接"
+grep -q 'nsy,g68-plus' "$NET02" 2>/dev/null && ok "02_network 含 nsy,g68-plus" || bad "02_network 缺 nsy,g68-plus"
+grep -q 'ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"' "$NET02" 2>/dev/null && ok "02_network: LAN=lan1-4 / WAN=wan" || bad "02_network 映射不是 DSA 形式"
+DSADIR="$ROOT/target/linux/rockchip/files/drivers/net/dsa/realtek"
+[ -f "$DSADIR/rtl8365mb.c" ] && ok "DSA 驱动已投递 (rtl8365mb.c)" || bad "缺 DSA 驱动 rtl8365mb.c"
