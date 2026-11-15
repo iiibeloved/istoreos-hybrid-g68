@@ -1,0 +1,136 @@
+#!/bin/sh /etc/rc.common
+# =============================================================================
+#  G68 网络端口映射（每次启动按 SoC 控制器物理地址识别，幂等）
+#
+#  gmac0 = fe2a0000（RGMII + RTL8211F，靠近电源的 WAN 口）
+#  gmac1 = fe010000（SGMII fixed-link，接 RTL8367S，LAN 交换机）
+#
+#  不依赖 eth0/eth1 命名：iStoreOS 6.6.144 会按 dts aliases 命名（gmac0=eth0），
+#  immortalwrt 老内核按 probe 顺序（gmac1=eth0），两者相反。
+#  这里直接从 /sys/devices/platform/fe{2a,01}0000.ethernet/net/ 读取真实接口名，
+#  并保留 /sys/class/net/*/device 回退，最后再回退到 eth* 两两配对。
+#
+#  若 RTL8367S 被 DSA 接管（出现 lan1..lan4），LAN 使用 br-lan 桥接这些端口。
+# =============================================================================
+START=19
+LOG=/etc/g68-network.log
+
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+find_by_platform() {
+	# $1 = 物理地址（fe2a0000 / fe010000）
+	local d
+	d=$(ls -1 /sys/devices/platform/"$1".ethernet/net 2>/dev/null | head -1)
+	[ -n "$d" ] && echo "$d"
+}
+
+find_by_device_link() {
+	# $1 = 物理地址
+	local d n path
+	for d in /sys/class/net/*; do
+		[ -e "$d/device" ] || continue
+		n=$(basename "$d")
+		path=$(readlink -f "$d/device" 2>/dev/null)
+		case "$path" in
+			*"$1"*) echo "$n"; return 0 ;;
+		esac
+	done
+	return 1
+}
+
+start() {
+	[ -f "$LOG" ] || : > "$LOG"
+
+	MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null)
+	case "$MODEL" in
+		*G68*) : ;;
+		*) log "model=$MODEL，不是 G68，跳过"; return 0 ;;
+	esac
+
+	GMAC0=$(find_by_platform fe2a0000)
+	[ -n "$GMAC0" ] || GMAC0=$(find_by_device_link fe2a0000)
+	GMAC1=$(find_by_platform fe010000)
+	[ -n "$GMAC1" ] || GMAC1=$(find_by_device_link fe010000)
+
+	# 最后回退：两个以太网口两两配对
+	if [ -z "$GMAC0" ] || [ -z "$GMAC1" ]; then
+		ALL=""
+		for d in /sys/class/net/*; do
+			n=$(basename "$d")
+			case "$n" in lo|br-*|docker*|veth*|dummy*|ifb*|tun*|tap*|sit*|wg*|ppp*) continue ;; esac
+			[ -e "$d" ] && ALL="$ALL $n"
+		done
+		set -- $ALL
+		[ -z "$GMAC0" ] && GMAC0="$1"
+		[ -z "$GMAC1" ] && GMAC1="$2"
+		log "回退配对: ALL='$ALL' → GMAC0=$GMAC0 GMAC1=$GMAC1"
+	fi
+
+	log "model='$MODEL' gmac0=$GMAC0 gmac1=$GMAC1"
+	[ -n "$GMAC0" ] && [ -n "$GMAC1" ] || { log "接口识别失败，跳过"; return 0; }
+
+	# eth_order（若 dts 提供）仅用于日志
+	[ -s /proc/device-tree/eth_order ] && log "eth_order=$(tr -d '\0' < /proc/device-tree/eth_order)" || true
+
+	DSA_PORTS=""
+	for p in lan1 lan2 lan3 lan4; do
+		[ -e "/sys/class/net/$p" ] && DSA_PORTS="$DSA_PORTS $p"
+	done
+
+	# 诊断版：把电源侧 gmac0 作为 LAN（静态+DHCP），gmac1(SGMII) 作为 WAN
+	LAN_DEV="$GMAC0"
+	WAN_DEV="$GMAC1"
+
+	if [ "$(uci -q get network.lan.device)" = "$LAN_DEV" ] \
+	   && [ "$(uci -q get network.lan.proto)" = "static" ] \
+	   && [ "$(uci -q get network.wan.device)" = "$WAN_DEV" ]; then
+		log "配置已正确，无需修改"
+		return 0
+	fi
+
+	for sect in network.lan network.wan network.wan6 dhcp.lan network.brlan; do
+		uci -q delete "$sect" 2>/dev/null || true
+	done
+
+	if [ -n "$DSA_PORTS" ]; then
+		uci -q batch <<UCIEOF
+set network.brlan=device
+set network.brlan.name='br-lan'
+set network.brlan.type='bridge'
+commit network
+UCIEOF
+		for p in $DSA_PORTS; do uci -q add_list network.brlan.ports="$p"; done
+		uci -q commit network
+	fi
+
+	uci -q batch <<UCIEOF
+set network.lan=interface
+set network.lan.device='$LAN_DEV'
+set network.lan.proto='static'
+set network.lan.ipaddr='192.168.100.1'
+set network.lan.netmask='255.255.255.0'
+set network.lan.ip6assign='60'
+set network.wan=interface
+set network.wan.device='$WAN_DEV'
+set network.wan.proto='dhcp'
+set network.wan6=interface
+set network.wan6.device='$WAN_DEV'
+set network.wan6.proto='dhcpv6'
+commit network
+set dhcp.lan=dhcp
+set dhcp.lan.interface='lan'
+set dhcp.lan.start='100'
+set dhcp.lan.limit='150'
+set dhcp.lan.leasetime='12h'
+commit dhcp
+UCIEOF
+
+	# 快照，便于后续排查
+	{
+		echo "--- $(date '+%F %T') ---"
+		ip -br link 2>/dev/null
+		uci show network 2>/dev/null
+	} >> /etc/g68-network-state.log 2>/dev/null
+
+	log "诊断角色: lan=$LAN_DEV(gmac0) wan=$WAN_DEV(gmac1)"
+}

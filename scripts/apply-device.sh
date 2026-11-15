@@ -142,23 +142,16 @@ if [ -f "$NET02" ]; then
 		awk 'BEGIN{ins=0}
 		{
 			if (!ins && $0 == "\t*)") {
-				printf "\tnsy,g68-plus)\n\t\tucidef_set_interfaces_lan_wan \"lan1 lan2 lan3 lan4\" \"wan\"\n\t\t;;\n"
+				printf "\tnsy,g68-plus)\n\t\tucidef_set_interfaces_lan_wan \"eth0\" \"eth1\"\n\t\t;;\n"
 				ins=1
 			}
 			print
 		}' "$NET02" > "$NET02.tmp" && mv "$NET02.tmp" "$NET02"
 		grep -q 'nsy,g68-plus' "$NET02" || die "02_network 结构变化：未找到默认分支，无法插入 G68 映射"
-		say "02_network: 已插入 nsy,g68-plus → LAN=lan1-4 / WAN=wan（DSA）"
+		say "02_network: 已插入 nsy,g68-plus → LAN=eth0 / WAN=eth1（board.json 也会正确生成）"
 	fi
 else
 	say "警告: 找不到 $NET02，跳过板级网络映射（uci-defaults 仍会兜底）"
-fi
-
-# ---------- 7.53) 内核 DSA 驱动文件（RTL8367S 交换机）----------
-if [ -d "$DEV/kernel-files" ]; then
-	mkdir -p "$ROOT/target/linux/rockchip/files"
-	cp -a "$DEV/kernel-files/." "$ROOT/target/linux/rockchip/files/"
-	say "内核文件已放置: target/linux/rockchip/files/（$(cd "$DEV/kernel-files" && find . -type f | wc -l) 个文件）"
 fi
 
 # ---------- 7.55) 中文覆盖数据（按已安装应用条件投递）----------
