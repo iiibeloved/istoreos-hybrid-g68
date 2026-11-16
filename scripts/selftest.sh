@@ -160,6 +160,23 @@ grep -q 'ISTOREOS_BRANCH: istoreos-24.10' "$HERE/.github/workflows/upstream-watc
 grep -q 'workflows/build.yml/dispatches' "$HERE/.github/workflows/upstream-watch.yml" \
 	&& ok "上游变化自动触发构建" || bad "缺上游变化自动触发"
 
+echo "== 9. quickstart / 网络向导 来源（官方 feeds 缺失 → small）=="
+grep -q '^src-git small ' "$ROOT/feeds.conf" \
+	&& ok "feeds.conf 已声明 small 源" || bad "feeds.conf 缺 small 源（quickstart/向导 config 项会被丢弃）"
+for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-store luci-app-alist luci-app-ddns-go; do
+	grep -qx "CONFIG_PACKAGE_$p=y" "$CFG" && ok "已选 $p" || bad "缺少 $p"
+done
+# 官方 feeds 自身不得已含 quickstart；若上游将来内置，则应改回官方来源并撤掉 small
+if [ -d "$ROOT/feeds" ]; then
+	if grep -rqs 'PKG_NAME:=quickstart' "$ROOT/feeds" 2>/dev/null; then
+		bad "官方 feeds 已提供 quickstart（small 来源需复核为重复）"
+	else
+		ok "官方 feeds 不含 quickstart（来源 = small）"
+	fi
+else
+	printf '  [INFO] feeds 尚未 update，跳过官方 feeds 内容检查\n'
+fi
+
 if [ "$FAIL" -gt 0 ]; then
 	echo "自检失败：$FAIL 项"
 	exit 1

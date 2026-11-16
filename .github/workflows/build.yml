@@ -325,7 +325,16 @@ jobs:
           [ -d istoreos/.git ] || { echo "::error::iStoreOS 克隆失败（3 次）"; exit 1; }
           sh scripts/apply-device.sh istoreos
           sh scripts/selftest.sh istoreos
-          ( cd istoreos && ./scripts/feeds update -a >/dev/null && ./scripts/feeds install -a >/dev/null )
+          # 官方 feeds 之后再按名安装 iStoreOS 官方缺失的包
+          # （small 内与官方同名的包不安装，保持"以官方为基准"）
+          ( cd istoreos
+            ./scripts/feeds update -a >/dev/null
+            ./scripts/feeds install -a >/dev/null
+            ./scripts/feeds update small >/dev/null
+            for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-alist alist luci-app-ddns-go ddns-go; do
+              ./scripts/feeds install "$p" >/dev/null 2>&1 || echo "::warning::feeds install $p 失败（该包将被跳过）"
+            done
+            echo "=== small 已装包 ==="; ls package/feeds/small 2>/dev/null | tr '\n' ' '; echo )
           cp configs/g68-hybrid.config istoreos/.config
           cd istoreos
           make defconfig 2>&1 | tail -20
