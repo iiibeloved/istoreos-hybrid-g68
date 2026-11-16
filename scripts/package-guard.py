@@ -223,6 +223,9 @@ def main():
     ap.add_argument("--json", dest="json_path", help="JSON 报告路径")
     ap.add_argument("--md", dest="md_path", help="Markdown 报告路径")
     ap.add_argument("--apply", action="store_true", help="原地写回注释（默认只写副本）")
+    ap.add_argument("--allow", action="append", default=[],
+                    help="豁免判定的包名（可重复）：即使与上游同名/PROVIDES 冲突也不注释，"
+                         "用于显式指定的替代包（如 dnsmasq-full 替代 dnsmasq）")
     ap.add_argument("--strict", action="store_true", help="存在需注释项时返回非零")
     ap.add_argument("--fail-on-unknown", action="store_true", help="存在未知包时返回非零")
     args = ap.parse_args()
@@ -242,6 +245,14 @@ def main():
     config_names = read_names_from_config(args.hybrid_config)
     all_names = sorted(set(list_names) | set(config_names))
     decisions = {n: classify(n, selected, occupied, meta) for n in all_names}
+    orig = dict(decisions)
+
+    # 显式豁免：用户指定用某个包替代上游同名/占用名（如 dnsmasq-full 替代 dnsmasq），
+    # 这些包即使被判为 duplicate / provides_conflict 也保留，不做注释。
+    allow = set(args.allow or [])
+    allowed_hits = sorted(n for n in allow if n in decisions and decisions[n] != "ok")
+    for n in allowed_hits:
+        decisions[n] = "ok"
 
     counts = {k: 0 for k in REASON}
     counts["ok"] = 0
@@ -276,6 +287,7 @@ def main():
         "commented_lines": {"builtin_list": list_changed, "hybrid_config": config_changed},
         "outputs": {"builtin_list": list_out, "hybrid_config": config_out},
         "apply_in_place": args.apply,
+        "allow": {"names": sorted(allow), "rescued": allowed_hits},
         "details": {k: sorted(n for n, v in decisions.items() if v == k) for k in REASON},
     }
     json_path = args.json_path or str(out_dir / "report.json")
@@ -301,6 +313,9 @@ def main():
         "注释行数：builtin-list %d，hybrid config %d（%s）"
         % (list_changed, config_changed, "原地写回" if args.apply else "写入 out-dir 副本"),
         "",
+        "显式豁免（不按去重规则注释）：%s"
+        % (("、".join("%s（原判定 %s）" % (n, orig.get(n, "?")) for n in allowed_hits)
+            if allowed_hits else "无"),),
     ]
     for key in ("duplicate", "provides_conflict", "conflicts", "unknown"):
         items = summary["details"][key]

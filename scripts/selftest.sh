@@ -167,15 +167,42 @@ for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-store luci-a
 	grep -qx "CONFIG_PACKAGE_$p=y" "$CFG" && ok "已选 $p" || bad "缺少 $p"
 done
 # 官方 feeds 自身不得已含 quickstart；若上游将来内置，则应改回官方来源并撤掉 small
+# 注意：只查官方 feed 目录，排除 small 自身，否则会把 small 当成官方来源
 if [ -d "$ROOT/feeds" ]; then
-	if grep -rqs 'PKG_NAME:=quickstart' "$ROOT/feeds" 2>/dev/null; then
-		bad "官方 feeds 已提供 quickstart（small 来源需复核为重复）"
+	FOUND=""
+	for d in packages luci store third routing telephony; do
+		[ -d "$ROOT/feeds/$d" ] || continue
+		grep -rqs 'PKG_NAME:=quickstart' "$ROOT/feeds/$d" && FOUND="$d"
+	done
+	if [ -n "$FOUND" ]; then
+		bad "官方 feeds（$FOUND）已提供 quickstart（small 来源需复核为重复）"
 	else
 		ok "官方 feeds 不含 quickstart（来源 = small）"
 	fi
 else
 	printf '  [INFO] feeds 尚未 update，跳过官方 feeds 内容检查\n'
 fi
+
+echo "== 10. DNS 替换：dnsmasq-full 取代上游 dnsmasq（去重规则唯一例外）=="
+grep -qx 'CONFIG_PACKAGE_dnsmasq-full=y' "$CFG" && ok "已选 dnsmasq-full" || bad "缺少 dnsmasq-full"
+grep -qx '# CONFIG_PACKAGE_dnsmasq is not set' "$CFG" \
+	&& ok "显式关闭上游 dnsmasq" || bad "缺 '# CONFIG_PACKAGE_dnsmasq is not set'（两者互斥）"
+if grep -qx 'CONFIG_PACKAGE_dnsmasq=y' "$CFG"; then
+	bad "同时选中 dnsmasq（PROVIDES 同名，必须排除）"
+else
+	ok "configs 未选中上游 dnsmasq"
+fi
+grep -q -- '--allow dnsmasq-full' "$HERE/.github/workflows/build.yml" \
+	&& ok "package-guard 已豁免 dnsmasq-full" || bad "package-guard 缺 --allow dnsmasq-full"
+
+echo "== 11. 代理应用（openclash / passwall / homeproxy）=="
+for p in luci-app-openclash luci-app-passwall luci-app-homeproxy; do
+	grep -qx "CONFIG_PACKAGE_$p=y" "$CFG" && ok "已选 $p" || bad "缺少 $p"
+done
+for i in INCLUDE_Xray INCLUDE_SingBox INCLUDE_Geoview; do
+	grep -qx "CONFIG_PACKAGE_luci-app-passwall_$i=y" "$CFG" \
+		&& ok "passwall $i" || bad "passwall $i 未选（passwall 会缺核心）"
+done
 
 if [ "$FAIL" -gt 0 ]; then
 	echo "自检失败：$FAIL 项"

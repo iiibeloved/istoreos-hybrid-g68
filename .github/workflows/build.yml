@@ -152,14 +152,14 @@ jobs:
           head -20 /tmp/dropped.txt || true
           grep -q "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus=y" /tmp/ours.config \
             || { echo "::error::defconfig 未选中 G68 设备"; exit 1; }
-            # DNS 去重断言：以上游 dnsmasq 为准，dnsmasq-full 必须被排除
-            grep -q '^CONFIG_PACKAGE_dnsmasq=y$' /tmp/ours.config \
-              || { echo "::error::上游 dnsmasq 未选中"; grep -n "CONFIG_PACKAGE_dnsmasq" /tmp/ours.config || true; exit 1; }
-            if grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' /tmp/ours.config; then
-              echo "::error::dnsmasq-full 与上游 dnsmasq 冲突（去重规则：以上游为准）"
+            # DNS：显式用 dnsmasq-full 替代上游 dnsmasq（去重规则的唯一例外）
+            grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' /tmp/ours.config \
+              || { echo "::error::dnsmasq-full 未选中（DNS 替换失败）"; grep -n "CONFIG_PACKAGE_dnsmasq" /tmp/ours.config || true; exit 1; }
+            if grep -q '^CONFIG_PACKAGE_dnsmasq=y$' /tmp/ours.config; then
+              echo "::error::dnsmasq 与 dnsmasq-full 同时选中（PROVIDES 同名，必须互斥）"
               exit 1
             fi
-            echo "[OK] DNS: 使用上游 dnsmasq（dnsmasq-full 已按去重规则排除）"
+            echo "[OK] DNS: 使用 dnsmasq-full（上游 dnsmasq 已排除）"
       - name: 以上游包清单为基准去重（package-guard）
         shell: bash
         run: |
@@ -175,6 +175,7 @@ jobs:
           args+=(--out-dir package-guard-out)
           args+=(--json package-guard-out/report.json)
           args+=(--md package-guard-out/report.md)
+          args+=(--allow dnsmasq-full)
           [ -f configs/builtin-list.txt ] && args+=(--builtin-list configs/builtin-list.txt)
           for f in istoreos/feeds/*.index; do [ -f "$f" ] && args+=(--index "$f"); done
           args+=(--makefile-dir istoreos/package --makefile-dir istoreos/feeds)
@@ -331,7 +332,11 @@ jobs:
             ./scripts/feeds update -a >/dev/null
             ./scripts/feeds install -a >/dev/null
             ./scripts/feeds update small >/dev/null
-            for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-alist alist luci-app-ddns-go ddns-go; do
+            for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-alist alist \
+                     luci-app-ddns-go ddns-go \
+                     luci-app-openclash luci-app-passwall luci-app-homeproxy \
+                     sing-box xray-core geoview smartdns haproxy shadowsocks-rust \
+                     shadowsocksr-libev simple-obfs v2ray-plugin chinadns-ng dns2socks microsocks tcping; do
               ./scripts/feeds install "$p" >/dev/null 2>&1 || echo "::warning::feeds install $p 失败（该包将被跳过）"
             done
             echo "=== small 已装包 ==="; ls package/feeds/small 2>/dev/null | tr '\n' ' '; echo )
@@ -340,9 +345,9 @@ jobs:
           make defconfig 2>&1 | tail -20
           echo "=== 关键配置确认 ==="
           grep -E "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus|CONFIG_TARGET_KERNEL_PARTSIZE|CONFIG_TARGET_ROOTFS_PARTSIZE|CONFIG_PACKAGE_luci-app-store" .config || true
-          grep -q '^CONFIG_PACKAGE_dnsmasq=y$' .config || { echo "::error::上游 dnsmasq 未选中"; exit 1; }
-          if grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' .config; then
-            echo "::error::dnsmasq-full 与上游 dnsmasq 冲突（去重规则：以上游为准）"
+          grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' .config || { echo "::error::dnsmasq-full 未选中（DNS 替换失败）"; exit 1; }
+          if grep -q '^CONFIG_PACKAGE_dnsmasq=y$' .config; then
+            echo "::error::dnsmasq 与 dnsmasq-full 同时选中（PROVIDES 同名，必须互斥）"
             exit 1
           fi
       - name: 缓存 dl
