@@ -95,6 +95,37 @@ jobs:
         run: set -o pipefail; sh scripts/apply-device.sh istoreos 2>&1 | tee apply-device.log
       - name: 静态自检
         run: set -o pipefail; sh scripts/selftest.sh istoreos 2>&1 | tee selftest.log
+      - name: 打印构建目标（hybrid/dsa 一致性）
+        shell: bash
+        run: |
+          set -euo pipefail
+          CFG=$(ls configs/*.config | head -1)
+          MK=istoreos/target/linux/rockchip/image/armv8.mk
+          BLK=$(awk '/^define Device\/nsy_g68-plus$/,/^endef$/' "$MK")
+          DTS=$(printf '%s\n' "$BLK" | sed -n 's/^[[:space:]]*DEVICE_DTS := //p')
+          UBOOT=$(printf '%s\n' "$BLK" | sed -n 's/^[[:space:]]*UBOOT_DEVICE_NAME := //p')
+          MODEL=$(printf '%s\n' "$BLK" | sed -n 's/^[[:space:]]*DEVICE_MODEL := //p')
+          g() { sed -n "s/^$1=//p" "$CFG" | head -1; }
+          BOARD=$(g CONFIG_TARGET_BOARD); BOARD=${BOARD:-rockchip}
+          SUB=$(g CONFIG_TARGET_SUBTARGET); SUB=${SUB:-armv8}
+          [ "$(g CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus)" = "y" ] \
+            || { echo "::error::未选中 G68 设备"; exit 1; }
+          [ "$DTS" = "rockchip/rk3568-nsy-g68-plus" ] \
+            || { echo "::error::DTS 目标不一致: ${DTS:-空}"; exit 1; }
+          [ "$UBOOT" = "nsy-g68-plus-rk3568" ] \
+            || { echo "::error::U-Boot 目标不一致: ${UBOOT:-空}"; exit 1; }
+          {
+            echo "### 构建目标 · ${{ github.event.repository.name }}"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 目标平台 | \`$BOARD/$SUB\`（aarch64_generic） |"
+            echo "| 设备 | \`nsy_g68-plus\`（NSY \`$MODEL\`） |"
+            echo "| 设备树 | \`$DTS\` |"
+            echo "| U-Boot 目标 | \`$UBOOT\` |"
+            echo "| 分区 | kernel $(g CONFIG_TARGET_KERNEL_PARTSIZE) MiB / rootfs $(g CONFIG_TARGET_ROOTFS_PARTSIZE) MiB / rootfs_data 4096 MiB |"
+            echo "| 镜像 | \`*nsy_g68-plus*sysupgrade.img.gz\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: 硬件级内容审核（hw-audit，dts ↔ 驱动/配置）
         run: sh scripts/hw-audit.sh
       - name: defconfig 合理性检查
