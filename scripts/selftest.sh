@@ -17,6 +17,15 @@ KDTS="$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3568-nsy-
 for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpcs"; do
 	grep -q "$pat" "$KDTS" 2>/dev/null && ok "kernel dts: $pat" || bad "kernel dts 缺 $pat"
 done
+# 上游升级时板级文件必须保持库存版本（防止被上游同名文件覆盖而改变网络/maskrom 行为）
+cmp -s "$DEV/kernel-dts/rk3568-nsy-g68-plus.dts" "$KDTS" \
+	&& ok "kernel dts 与库存逐字节一致" || bad "kernel dts 与库存不一致"
+for f in rk3568-nsy-g68-plus.dts rk3568-nsy-g68-plus-u-boot.dtsi; do
+	cmp -s "$DEV/uboot/static/$f" "$UB/src/arch/arm/dts/$f" \
+		&& ok "uboot $f 与库存一致" || bad "uboot $f 不一致"
+done
+cmp -s "$DEV/uboot/static/nsy-g68-plus-rk3568_defconfig" "$UB/src/configs/nsy-g68-plus-rk3568_defconfig" \
+	&& ok "uboot defconfig 与库存一致" || bad "uboot defconfig 不一致"
 
 echo "== 2. 内核补丁（XPCS / SGMII 2.5G）=="
 # 自动枚举：device/kernel-patches 下的每个补丁都必须被投递（增删补丁不再需要改自检）
@@ -104,3 +113,29 @@ fi
 for f in files/etc/init.d/g68-network files/etc/init.d/g68-diag; do
 	[ -e "$ROOT/$f" ] && bad "仍存在 $f（应已移除）" || ok "已移除 $f"
 done
+
+echo "== 8. 上游一致性（商城 / quickstart 以上游为准）=="
+CFG="$HERE/configs/g68-hybrid.config"
+for p in luci-app-store luci-app-quickstart quickstart; do
+	grep -qx "CONFIG_PACKAGE_$p=y" "$CFG" && ok "选用上游包 $p" || bad "缺上游包 $p"
+done
+# 不允许本地固化商城/quickstart 的 LuCI 文件（必须随上游 feeds 变化）
+OVR=$(cd "$DEV/files" && find . -type f \( -path '*luci*store*' -o -path '*luci*quickstart*' \) 2>/dev/null | head -5 || true)
+[ -z "$OVR" ] && ok "无本地商城/quickstart 覆盖文件" || bad "存在本地覆盖: $OVR"
+# i18n manifest 不应启用商城覆盖（注释行不计）
+if grep -qE '^luci-app-store[[:space:]]' "$DEV/files/usr/share/g68/i18n-manifest" 2>/dev/null; then
+	bad "i18n-manifest 仍启用商城覆盖"
+else
+	ok "i18n-manifest 未启用商城覆盖"
+fi
+# 上游跟随：upstream-watch 必须跟随 iStoreOS 分支并在变化时自动构建
+grep -q 'ISTOREOS_BRANCH: istoreos-24.10' "$HERE/.github/workflows/upstream-watch.yml" \
+	&& ok "upstream-watch 跟随 istoreos-24.10" || bad "upstream-watch 未跟随上游分支"
+grep -q 'workflows/build.yml/dispatches' "$HERE/.github/workflows/upstream-watch.yml" \
+	&& ok "上游变化自动触发构建" || bad "缺上游变化自动触发"
+
+if [ "$FAIL" -gt 0 ]; then
+	echo "自检失败：$FAIL 项"
+	exit 1
+fi
+echo "自检全部通过 ✅"
