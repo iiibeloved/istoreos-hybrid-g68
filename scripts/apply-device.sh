@@ -60,6 +60,24 @@ if [ -d "$DEV/kernel-patches" ]; then
 	say "内核补丁已放置: $(ls "$DEV/kernel-patches" | tr '\n' ' ')"
 fi
 
+# ---------- 3.5) 内核驱动文件覆盖（RTL8367S 交换机，swconfig 路线）----------
+# iStoreOS 自带的 rtl8367b.c 不支持 RTL8367S；这里用 immortalwrt standalone
+# 已验证的驱动替换（并同步 rtl8366_smi.c/h 的新增寄存器读写接口与头文件枚举）。
+# 版本守卫：仅在内核 6.6 上覆盖，避免上游升级内核后带病构建。
+KMAKE="$ROOT/target/linux/rockchip/Makefile"
+KPVER=$(sed -n 's/^KERNEL_PATCHVER:=//p' "$KMAKE" 2>/dev/null | head -1)
+[ -n "$KPVER" ] || die "无法从 $KMAKE 读出 KERNEL_PATCHVER"
+[ "$KPVER" = "6.6" ] || die "内核版本不匹配：iStoreOS=$KPVER，RTL8367S 驱动 overlay 仅适配 6.6。
+  上游升级内核后请基于新版本重新移植 device/kernel-files/generic/。"
+if [ -d "$DEV/kernel-files/generic" ]; then
+	mkdir -p "$ROOT/target/linux/generic/files"
+	cp -a "$DEV/kernel-files/generic/." "$ROOT/target/linux/generic/files/"
+	N=$(cd "$DEV/kernel-files/generic" && find . -type f | wc -l)
+	say "内核驱动 overlay 已投递到 target/linux/generic/files/（$N 个文件，RTL8367S/swconfig）"
+else
+	say "警告: 缺 device/kernel-files/generic，跳过交换机驱动覆盖"
+fi
+
 # ---------- 4) 内核 DTS ----------
 mkdir -p "$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip"
 cp -f "$DEV/kernel-dts/rk3568-nsy-g68-plus.dts" \
@@ -133,25 +151,18 @@ if [ -d "$DEV/files" ]; then
 	say "自定义文件已放置到 $ROOT/files/（$(cd "$DEV/files" && find . -type f | wc -l) 个文件）"
 fi
 
-# ---------- 7.52) 板级网络映射（iStoreOS 02_network 缺 nsy,g68-plus 分支）----------
-NET02="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network"
-if [ -f "$NET02" ]; then
-	if grep -q 'nsy,g68-plus' "$NET02"; then
-		say "02_network 已含 nsy,g68-plus 分支（跳过）"
-	else
-		awk 'BEGIN{ins=0}
-		{
-			if (!ins && $0 == "\t*)") {
-				printf "\tnsy,g68-plus)\n\t\tucidef_set_interfaces_lan_wan \"eth0\" \"eth1\"\n\t\t;;\n"
-				ins=1
-			}
-			print
-		}' "$NET02" > "$NET02.tmp" && mv "$NET02.tmp" "$NET02"
-		grep -q 'nsy,g68-plus' "$NET02" || die "02_network 结构变化：未找到默认分支，无法插入 G68 映射"
-		say "02_network: 已插入 nsy,g68-plus → LAN=eth0 / WAN=eth1（board.json 也会正确生成）"
-	fi
+# ---------- 7.52) 板级网络映射（独立 board.d 脚本，不改上游 02_network）----------
+# board_detect 按字母序 source /etc/board.d/*，02_network_g68 排在 02_network 之后，
+# 因此可覆盖 G68 映射而不触碰上游文件；上游更新 02_network 时本脚本照旧生效。
+BDSRC="$DEV/board.d/02_network_g68"
+BDDST="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d"
+if [ -f "$BDSRC" ]; then
+	mkdir -p "$BDDST"
+	cp -f "$BDSRC" "$BDDST/02_network_g68"
+	chmod 0755 "$BDDST/02_network_g68"
+	say "board.d: 已投递 02_network_g68（switch0: 0-3=lan / 4=wan / 6u@eth0 / 7u@eth1）"
 else
-	say "警告: 找不到 $NET02，跳过板级网络映射（uci-defaults 仍会兜底）"
+	die "缺少 $BDSRC（G68 网络映射会缺失，LAN/WAN 不可用）"
 fi
 
 # ---------- 7.55) 中文覆盖数据（按已安装应用条件投递）----------
@@ -161,7 +172,7 @@ if [ -d "$DEV/i18n-overlay" ]; then
 	say "中文覆盖数据已放置: files/usr/share/g68/i18n-overlay/（$(cd "$DEV/i18n-overlay" && find . -type f | wc -l) 个文件）"
 fi
 
-# ---------- 7.6) 设备内核配置对齐（移植 immortalwrt 已验证配置）----------
+# ---------- 7.6) 设备内核配置对齐（交换机驱动符号，仅供审计/自检核对）----------
 if [ -f "$DEV/kernel-config" ]; then
 	KCONF="$ROOT/target/linux/rockchip/armv8/config-6.6"
 	[ -f "$KCONF" ] || { say "警告: 找不到 $KCONF，跳过内核配置对齐"; }
@@ -169,8 +180,8 @@ if [ -f "$DEV/kernel-config" ]; then
 		if grep -q "G68 设备内核配置" "$KCONF"; then
 			say "内核配置已对齐（跳过）"
 		else
-			{ echo ""; echo "# --- G68 设备内核配置（来自 immortalwrt 基线）---"; cat "$DEV/kernel-config"; } >> "$KCONF"
-			say "已向 config-6.6 追加 G68 内核配置（RTL8367S DSA 等）"
+			{ echo ""; echo "# --- G68 设备内核配置（RTL8367S / swconfig）---"; cat "$DEV/kernel-config"; } >> "$KCONF"
+			say "已向 config-6.6 追加 G68 内核配置（SWCONFIG / RTL8366_SMI / RTL8367B_PHY）"
 		fi
 	fi
 fi

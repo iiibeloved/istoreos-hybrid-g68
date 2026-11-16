@@ -1,10 +1,10 @@
-# G68 设备内核配置对齐（以 immortalwrt 6.6.99 已验证配置为基线）
-# 板载 RTL8367S 交换机走 Realtek DSA 驱动；iStoreOS 6.6.144 默认未启用，
-# 不补齐则该交换机在真机上不可用（LAN 口不通）。
-CONFIG_NET_DSA_REALTEK=y
-CONFIG_NET_DSA_REALTEK_MDIO=y
-CONFIG_NET_DSA_REALTEK_SMI=y
-CONFIG_NET_DSA_REALTEK_RTL8365MB=y
-CONFIG_NET_DSA_REALTEK_RTL8366RB=y
-CONFIG_NET_DSA_TAG_RTL4_A=y
-CONFIG_NET_DSA_TAG_RTL8_4=y
+# G68 板载 RTL8367S 交换机 —— swconfig 传统驱动（与 immortalwrt standalone 真机验证一致）
+# 说明：内核侧符号由对应 kmod 包的 KCONFIG 自动强制为 =m，
+# 这里显式声明是为了构建前自检 / 硬件审计能核对驱动确实会被编入。
+#   kmod-swconfig            → CONFIG_SWCONFIG
+#   kmod-switch-rtl8366-smi  → CONFIG_RTL8366_SMI
+#   kmod-switch-rtl8367b     → CONFIG_RTL8367B_PHY
+CONFIG_SWCONFIG=m
+CONFIG_SWCONFIG_LEDS=y
+CONFIG_RTL8366_SMI=m
+CONFIG_RTL8367B_PHY=m

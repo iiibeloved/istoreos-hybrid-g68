@@ -64,31 +64,43 @@ while IFS=$(printf '\t') read -r pkg path; do
 	[ -f "$DEV/i18n-overlay/$path" ] || bad "manifest 指向不存在的覆盖: $path"
 done < "$DEV/i18n-manifest" 2>/dev/null || true
 
-echo "== 6. 内核配置对齐（Realtek DSA / RTL8367S）=="
+echo "== 6. 交换机驱动（RTL8367S / swconfig 路线）=="
 KCONF="$ROOT/target/linux/rockchip/armv8/config-6.6"
 if [ -f "$KCONF" ]; then
-	for sym in CONFIG_NET_DSA_REALTEK=y CONFIG_NET_DSA_REALTEK_MDIO=y CONFIG_NET_DSA_REALTEK_RTL8365MB=y CONFIG_NET_DSA_TAG_RTL8_4=y; do
-		grep -qx "$sym" "$KCONF" && ok "内核配置 $sym" || bad "缺少内核配置 $sym"
+	for sym in CONFIG_SWCONFIG CONFIG_RTL8366_SMI CONFIG_RTL8367B_PHY; do
+		grep -qE "^$sym=[my]$" "$KCONF" && ok "内核配置 $sym" || bad "缺少内核配置 $sym"
 	done
 else
 	bad "找不到 $KCONF"
 fi
+# 驱动 overlay 必须逐字节投递到 generic/files
+for f in $(cd "$DEV/kernel-files/generic" && find . -type f | sed 's|^\./||'); do
+	cmp -s "$DEV/kernel-files/generic/$f" "$ROOT/target/linux/generic/files/$f" \
+		&& ok "kernel-files/$f" || bad "kernel-files/$f 未投递或内容不一致"
+done
+grep -q 'realtek,rtl8367s' "$DEV/kernel-files/generic/drivers/net/phy/rtl8367b.c" \
+	&& ok "rtl8367b 驱动含 realtek,rtl8367s" || bad "rtl8367b 驱动缺 RTL8367S 支持"
+for pkg in kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b; do
+	grep -qx "CONFIG_PACKAGE_$pkg=y" "$HERE/configs/g68-hybrid.config" \
+		&& ok "包 $pkg" || bad "缺包 $pkg"
+done
 
-echo "== 7. 板级网络映射（G68 LAN=gmac1 / WAN=gmac0，按硬件识别）=="
-NET02="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network"
-if [ -f "$NET02" ]; then
-	grep -q 'nsy,g68-plus' "$NET02" && ok "02_network 含 nsy,g68-plus 分支" || bad "02_network 缺 nsy,g68-plus 分支"
+echo "== 7. 板级网络映射（独立 board.d，不依赖上游 02_network）=="
+BDDST="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network_g68"
+if [ -f "$BDDST" ]; then
+	ok "board.d/02_network_g68 已投递"
+	cmp -s "$DEV/board.d/02_network_g68" "$BDDST" && ok "映射内容一致" || bad "映射内容不一致"
+	sh -n "$BDDST" && ok "映射脚本语法" || bad "映射脚本语法错误"
+	grep -q 'nsy,g68-plus' "$BDDST" && ok "含 nsy,g68-plus 分支" || bad "缺 nsy,g68-plus 分支"
+	if grep -q '6u@eth0' "$BDDST" && grep -q '7u@eth1' "$BDDST"; then
+		ok "CPU 口映射 6u@eth0 / 7u@eth1"
+	else
+		bad "CPU 口映射缺失"
+	fi
 else
-	bad "找不到 $NET02"
+	bad "缺 board.d/02_network_g68"
 fi
-NETINIT="$ROOT/files/etc/init.d/g68-network"
-if [ -f "$NETINIT" ]; then
-	ok "常驻网络校正脚本已投递"
-	[ -x "$NETINIT" ] && ok "网络脚本可执行" || bad "网络脚本缺少可执行位"
-	sh -n "$NETINIT" && ok "网络脚本语法" || bad "网络脚本语法错误"
-	grep -q 'fe2a0000' "$NETINIT" && grep -q 'fe010000' "$NETINIT" && ok "脚本按 gmac0/gmac1 物理地址识别" || bad "脚本未按物理地址识别端口"
-else
-	bad "缺 files/etc/init.d/g68-network"
-fi
-NETRC="$ROOT/files/etc/rc.d/S19g68-network"
-[ -L "$NETRC" ] && ok "rc.d 开机自启链接" || bad "缺 rc.d/S19g68-network 自启链接"
+# 诊断版常驻脚本必须已移除（每次启动覆盖用户配置，且与 swconfig 映射冲突）
+for f in files/etc/init.d/g68-network files/etc/init.d/g68-diag; do
+	[ -e "$ROOT/$f" ] && bad "仍存在 $f（应已移除）" || ok "已移除 $f"
+done

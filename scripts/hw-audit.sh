@@ -39,7 +39,7 @@ exm()  { printf '  [EXEMPT]    %s\n' "$*"; }
 
 dts_has() { grep -qE "$1" "$DTS" 2>/dev/null; }
 pkg_has() { grep -qE "^CONFIG_PACKAGE_$1=y$" "$CFG" 2>/dev/null; }
-k_has()   { grep -qE "^$1=y$" "$KCFG" 2>/dev/null; }
+k_has()   { grep -qE "^$1=[ym]$" "$KCFG" 2>/dev/null; }
 exempted(){ [ -f "$EX" ] && grep -qiE "^$1[[:space:]]" "$EX"; }
 
 # 可选：iStoreOS 源码树（prepare 阶段存在），用于读取内核版本与校验补丁一致性
@@ -62,13 +62,22 @@ echo "  config: $CFG ($(grep -c '^CONFIG_PACKAGE_.*=y$' "$CFG" 2>/dev/null || ec
 echo "  kernel-config: $KCFG"
 echo
 
-echo "== H3 交换机 RTL8367S (DSA) =="
-if dts_has 'rtl8367s|realtek,mdio'; then
-	if k_has CONFIG_NET_DSA_REALTEK_RTL8365MB && k_has CONFIG_NET_DSA_REALTEK_MDIO && k_has CONFIG_NET_DSA_TAG_RTL8_4; then
-		ok "dts 声明 rtl8367s，kernel-config 已含 NET_DSA_REALTEK_* / TAG_RTL8_4"
+echo "== H3 交换机 RTL8367S（swconfig / rtl8367b）=="
+if dts_has 'rtl8367s'; then
+	if k_has CONFIG_SWCONFIG && k_has CONFIG_RTL8366_SMI && k_has CONFIG_RTL8367B_PHY; then
+		ok "kernel-config 已含 SWCONFIG / RTL8366_SMI / RTL8367B_PHY"
 	else
-		miss "dts 声明 rtl8367s，但 kernel-config 缺 NET_DSA_REALTEK_RTL8365MB/MDIO/TAG_RTL8_4（LAN 将不可用）"
+		miss "dts 声明 rtl8367s，但 kernel-config 缺 SWCONFIG/RTL8366_SMI/RTL8367B_PHY（LAN/WAN 将不可用）"
 	fi
+	# 上游 iStoreOS 的 rtl8367b.c 不识别 RTL8367S，必须由 overlay 提供
+	if grep -q 'realtek,rtl8367s' "$DEV/kernel-files/generic/drivers/net/phy/rtl8367b.c" 2>/dev/null; then
+		ok "驱动 overlay 支持 realtek,rtl8367s"
+	else
+		miss "device/kernel-files 缺支持 RTL8367S 的 rtl8367b.c"
+	fi
+	for pkg in kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b; do
+		pkg_has "$pkg" && ok "已选包 $pkg" || miss "缺包 $pkg"
+	done
 else
 	warn "dts 未发现 rtl8367s 节点（若硬件实际存在需核查 dts）"
 fi

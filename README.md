@@ -31,7 +31,7 @@
 - **中文条件投递，无孤儿菜单**
   `g68-i18n` 仅在检测到对应应用已安装时覆盖其界面文件，避免"装了中文包但菜单不存在"的孤儿项。
 - **CI 硬件级审核**
-  `hw-audit` 在编译前交叉核对 DTS ↔ 内核配置 ↔ 包集（DSA 交换机 / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项直接阻断构建。
+  `hw-audit` 在编译前交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S 交换机 / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项直接阻断构建。
 - **三层核心守卫**
   u-boot 源码、应用后树、编译产物三处断言 `download key pressed`、`adc_channel_single_shot`、`BOOT_MODE_REG=0xfdc20200`，防止 MaskROM 能力被上游改动悄悄破坏。
 - **可复现的构建记录**
@@ -127,8 +127,10 @@ iStoreOS 官方源 (istoreos-24.10)
 
 ```text
 device/
-  kernel-dts/            G68 内核设备树（SGMII/XPCS、DSA、adc-keys、eMMC）
-  kernel-config/         内核配置片段（Realtek DSA 等）
+  kernel-dts/            G68 内核设备树（SGMII/XPCS、RTL8367S、adc-keys、eMMC）
+  kernel-config          内核配置片段（SWCONFIG / RTL8366_SMI / RTL8367B_PHY）
+  kernel-files/          内核驱动覆盖（支持 RTL8367S 的 rtl8367b 等，仅内核 6.6）
+  board.d/               板级网络映射 02_network_g68（不修改上游 02_network）
   kernel-patches/        910/911/913/914 内核补丁
   uboot/                 u-boot overlay（boot_mode、defconfig、板级 dts、版本守卫）
   i18n-overlay/          中文覆盖（28 个文件，条件投递）
