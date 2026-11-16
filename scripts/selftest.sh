@@ -79,8 +79,34 @@ if [ -f "$KCONF" ]; then
 	for sym in CONFIG_SWCONFIG CONFIG_RTL8366_SMI CONFIG_RTL8367B_PHY; do
 		grep -qE "^$sym=[my]$" "$KCONF" && ok "内核配置 $sym" || bad "缺少内核配置 $sym"
 	done
+	# swconfig_leds.c 未处理 SWITCH_PORT_SPEED_2500，上游开 -Werror=switch 会编译失败
+	if grep -qE '^CONFIG_SWCONFIG_LEDS=y$' "$KCONF"; then
+		bad "config-6.6 仍开 CONFIG_SWCONFIG_LEDS=y（会触发 target/linux 编译失败）"
+	elif grep -q '^# CONFIG_SWCONFIG_LEDS is not set' "$KCONF"; then
+		ok "config-6.6 已关闭 SWCONFIG_LEDS"
+	else
+		bad "config-6.6 未显式关闭 SWCONFIG_LEDS（不确定状态）"
+	fi
 else
 	bad "找不到 $KCONF"
+fi
+# apply-device.sh §7.54 必须已 patch 上游 netdevices.mk 的 CONFIG_SWCONFIG_LEDS=y → n
+NMK="$ROOT/package/kernel/linux/modules/netdevices.mk"
+if [ -f "$NMK" ]; then
+	if grep -q 'CONFIG_SWCONFIG_LEDS=y' "$NMK" && ! grep -q 'CONFIG_SWCONFIG_LEDS=n' "$NMK"; then
+		bad "netdevices.mk 的 CONFIG_SWCONFIG_LEDS 仍为 =y（apply-device 未执行 §7.54）"
+	else
+		ok "netdevices.mk 已关闭 SWCONFIG_LEDS（apply-device §7.54 生效）"
+	fi
+else
+	bad "找不到 netdevices.mk"
+fi
+# 上游 generic/config-6.6 若强制 SWCONFIG_LEDS=y，kconfig.pl 合并时可能盖住我们的设置
+GC="$ROOT/target/linux/generic/config-6.6"
+if [ -f "$GC" ] && grep -qE '^CONFIG_SWCONFIG_LEDS=y$' "$GC"; then
+	bad "上游 generic/config-6.6 强制 SWCONFIG_LEDS=y（kernel-config 可能被覆盖）"
+else
+	ok "上游 generic/config-6.6 未强制 SWCONFIG_LEDS=y"
 fi
 # 驱动 overlay 必须逐字节投递到 generic/files
 for f in $(cd "$DEV/kernel-files/generic" && find . -type f | sed 's|^\./||'); do
