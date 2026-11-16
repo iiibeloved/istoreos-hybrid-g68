@@ -771,6 +771,7 @@ static int rtl8367b_extif_set_mode(struct rtl8366_smi *smi, int id,
 		{0x0F80, 0x0001}, 
 		{0x83F2, 0x002E} 
 	};
+	(void)redData1; /* 兼容 -Werror=unused-variable */
 	unsigned int redData5[][2] =  { 
 		{0x82F1, 0x0500}, 
 		{0xF195, 0x0501}, 
