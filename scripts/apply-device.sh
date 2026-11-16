@@ -165,6 +165,14 @@ else
 	die "缺少 $BDSRC（G68 网络映射会缺失，LAN/WAN 不可用）"
 fi
 
+# ---------- 7.54) 内核 swconfig LED 选项（规避上游 6.6.144 -Werror）----------
+NETDEV_MK="$ROOT/package/kernel/linux/modules/netdevices.mk"
+if [ -f "$NETDEV_MK" ] && grep -q 'CONFIG_SWCONFIG_LEDS=y' "$NETDEV_MK"; then
+	sed -i 's/CONFIG_SWCONFIG_LEDS=y/CONFIG_SWCONFIG_LEDS=n/' "$NETDEV_MK"
+	grep -q 'CONFIG_SWCONFIG_LEDS=n' "$NETDEV_MK" || die "netdevices.mk 结构变化：无法关闭 SWCONFIG_LEDS"
+	say "netdevices.mk: 已关闭 CONFIG_SWCONFIG_LEDS（kernel 6.6.144 swconfig_leds.c -Werror 枚举缺失）"
+fi
+
 # ---------- 7.55) 中文覆盖数据（按已安装应用条件投递）----------
 if [ -d "$DEV/i18n-overlay" ]; then
 	mkdir -p "$ROOT/files/usr/share/g68/i18n-overlay"
