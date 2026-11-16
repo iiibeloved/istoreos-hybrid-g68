@@ -339,7 +339,20 @@ jobs:
                      shadowsocksr-libev simple-obfs v2ray-plugin chinadns-ng dns2socks microsocks tcping; do
               ./scripts/feeds install "$p" >/dev/null 2>&1 || echo "::warning::feeds install $p 失败（该包将被跳过）"
             done
-            echo "=== small 已装包 ==="; ls package/feeds/small 2>/dev/null | tr '\n' ' '; echo )
+            echo "=== small 已装包 ==="; ls package/feeds/small 2>/dev/null | tr '\n' ' '; echo
+            # Go 工具链：iStoreOS 的 golang 1.23 固定 GOTOOLCHAIN=local，而 small 的
+            # xray-core / sing-box / alist / ddns-go 的 go.mod 要求 go>=1.25，
+            # local 模式下必然报 "requires go >= 1.25.0"。改为 auto：
+            # go 按各包 go.mod 自动下载所需 host 工具链（仅 host 端自举，
+            # 交叉编译目标仍是 aarch64_generic）。
+            n=0
+            while IFS= read -r f; do
+              sed -i 's/GOTOOLCHAIN=local/GOTOOLCHAIN=auto/g' "$f"
+              echo "Go 工具链已放宽: $f"
+              n=$((n+1))
+            done < <(grep -rl 'GOTOOLCHAIN=local' feeds/packages/lang/golang/ 2>/dev/null || true)
+            [ "$n" -gt 0 ] || echo "::warning::未找到 GOTOOLCHAIN=local（golang 包结构可能变化）"
+          )
           cp configs/g68-hybrid.config istoreos/.config
           cd istoreos
           make defconfig 2>&1 | tail -20

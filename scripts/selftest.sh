@@ -204,6 +204,11 @@ for i in INCLUDE_Xray INCLUDE_SingBox INCLUDE_Geoview; do
 		&& ok "passwall $i" || bad "passwall $i 未选（passwall 会缺核心）"
 done
 
+echo "== 12. Go 工具链放宽（small 的 Go 包要求 go>=1.25）=="
+grep -q 'GOTOOLCHAIN=local/GOTOOLCHAIN=auto' "$HERE/.github/workflows/build.yml" \
+	&& ok "build.yml 已把 GOTOOLCHAIN 改为 auto" \
+	|| bad "build.yml 未放宽 GOTOOLCHAIN（xray/sing-box/alist/ddns-go 会编译失败）"
+
 if [ "$FAIL" -gt 0 ]; then
 	echo "自检失败：$FAIL 项"
 	exit 1
