@@ -127,10 +127,14 @@ if [ -f "$BDDST" ]; then
 	cmp -s "$DEV/board.d/02_network_g68" "$BDDST" && ok "映射内容一致" || bad "映射内容不一致"
 	sh -n "$BDDST" && ok "映射脚本语法" || bad "映射脚本语法错误"
 	grep -q 'nsy,g68-plus' "$BDDST" && ok "含 nsy,g68-plus 分支" || bad "缺 nsy,g68-plus 分支"
-	if grep -q '6u@eth0' "$BDDST" && grep -q '7u@eth1' "$BDDST"; then
-		ok "CPU 口映射 6u@eth0 / 7u@eth1"
+	# 不断言具体端口编号（6/7 可随硬件/真机复核调整），只守住「有两条 untagged CPU 上联分别挂 eth0/eth1」；
+	# 映射内容本身已由上面的 cmp -s 与仓库基线 device/board.d/02_network_g68 逐字比对锁定。
+	if grep -qE '[0-9]+u@eth0' "$BDDST" && grep -qE '[0-9]+u@eth1' "$BDDST" \
+	   && [ "$(grep -oE '[0-9]+:lan' "$BDDST" | wc -l)" -ge 1 ] \
+	   && grep -qE '[0-9]+:wan' "$BDDST"; then
+		ok "CPU 双上联映射存在（$(grep -oE '[0-9]+u@eth[01]' "$BDDST" | tr '\n' ' ')）+ LAN/WAN 端口齐备"
 	else
-		bad "CPU 口映射缺失"
+		bad "CPU 上联映射或 LAN/WAN 端口缺失"
 	fi
 else
 	bad "缺 board.d/02_network_g68"
