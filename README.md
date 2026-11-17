@@ -1,61 +1,166 @@
-# NSY G68-PLUS · iStoreOS 24.10 杂交固件
+# NSY G68-PLUS · iStoreOS 杂交固件（swconfig 版）
 
-[![Build](https://github.com/iiibeloved/istoreos-hybrid-g68/actions/workflows/build.yml/badge.svg)](https://github.com/iiibeloved/istoreos-hybrid-g68/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/v/release/iiibeloved/istoreos-hybrid-g68)](https://github.com/iiibeloved/istoreos-hybrid-g68/releases)
+[![构建状态](https://github.com/iiibeloved/istoreos-hybrid-g68/actions/workflows/build.yml/badge.svg)](https://github.com/iiibeloved/istoreos-hybrid-g68/actions/workflows/build.yml)
+[![最新 Release](https://img.shields.io/github/v/release/iiibeloved/istoreos-hybrid-g68)](https://github.com/iiibeloved/istoreos-hybrid-g68/releases/latest)
 
-> **以 iStoreOS 24.10 官方为基座，移植 NSY G68 实机设备层。**
-> 保留 iStoreOS 的完整应用生态与更新节奏，同时获得 **长按 Reset 直接进 MaskROM** 的刷机体验——与 immortalwrt 固件完全一致的刷写方式：USB 双公头 + RKDevTool + 长按 Reset + **强制按地址写**。
+> 一句话简介：给 **农商云 NSY G68-PLUS（RK3568）** 用的完整 iStoreOS 固件，保留官方全部应用生态，并加入**长按 Reset 直接进 MaskROM** 的刷机体验；网络采用久经真机验证的 **RTL8367S / swconfig（4 个 LAN + 1 个 WAN）** 方案。
 
----
-
-## 为什么是"杂交"（Hybrid）
-
-| 层 | 来源 | 说明 |
-|---|---|---|
-| **系统基座** | [iStoreOS 24.10 官方](https://github.com/istoreos/istoreos)（`istoreos-24.10`） | 内核 6.6、官方 feeds、完整软件包生态 |
-| **设备层** | NSY G68 实机验证配置（DTS / u-boot / 分区 / 按键链路） | overlay 方式注入，不改 iStoreOS 源码树 |
-| **应用生态** | iStoreOS 官方 + store/third feed | quickstart、商城、ksmbd、Docker 等随上游更新 |
-
-不在 iStoreOS 里维护一份长期分叉的内核/设备树；设备层以**整文件 overlay** 交付，iStoreOS 升级时冲突面最小。
+如果你是第一次接触本固件，建议只看下面四节即可完成刷机：**[固件特点](#二固件特点) → [刷机前注意事项](#四刷机前注意事项) → [刷机方法](#五刷机方法) → [刷机后注意事项](#六刷机后注意事项)**。其余章节是进阶说明。
 
 ---
 
-## 核心特点
+## 目录
 
-- **长按 Reset → MaskROM（无需短接触点）**
-  SPL 阶段读 SARADC 通道 0；按住 Reset 上电即写 BROM 下载标志并复位，RKDevTool 直接识别 MaskROM 设备。
-- **全量 iStoreOS 包集（约 863 个包，含依赖展开）**
-  quickstart、iStore 商城、Docker、ksmbd、NFS、下载/文件工具等一应俱全，不是裁剪版。实际数量见每次 Release 的 `packages.manifest`。
-- **官方基准去重（硬规则）**
-  以 iStoreOS 官方 defconfig / manifest 为唯一基准；第三方与官方**同名**或**同文件**冲突（`dnsmasq` vs `dnsmasq-full`、`libustream` 变体等）一律移除，保证上游更新后重建可预期。
-- **中文条件投递，无孤儿菜单**
-  `g68-i18n` 仅在检测到对应应用已安装时覆盖其界面文件，避免"装了中文包但菜单不存在"的孤儿项。
-- **CI 硬件级审核**
-  `hw-audit` 在编译前交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S 交换机 / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项直接阻断构建。
-- **三层核心守卫**
-  u-boot 源码、应用后树、编译产物三处断言 `download key pressed`、`adc_channel_single_shot`、`BOOT_MODE_REG=0xfdc20200`，防止 MaskROM 能力被上游改动悄悄破坏。
-- **可复现的构建记录**
-  `upstream.lock`（`state` 分支）记录本次构建的 iStoreOS commit 与 packages/luci/store/third 等各 feed commit。
+- [一、这是什么](#一这是什么)
+- [二、固件特点](#二固件特点)
+- [三、包含内容](#三包含内容)
+- [四、刷机前注意事项](#四刷机前注意事项)
+- [五、刷机方法](#五刷机方法)
+- [六、刷机后注意事项](#六刷机后注意事项)
+- [七、下载与校验](#七下载与校验)
+- [八、已知限制](#八已知限制)
+- [九、常见问题](#九常见问题)
+- [十、技术实现（进阶）](#十技术实现进阶)
+- [十一、本地构建](#十一本地构建)
+- [致谢](#致谢)
 
 ---
 
-## 下载
+## 一、这是什么
 
-**最新 Release**：<https://github.com/iiibeloved/istoreos-hybrid-g68/releases/latest>
+本固件面向 **RK3568 架构的 G68-PLUS 软路由 / NAS 小板**，把两套经过验证的成果合在一起：
+
+| 组成 | 来源 | 带来的好处 |
+| --- | --- | --- |
+| **系统基座** | [iStoreOS 24.10 官方](https://github.com/istoreos/istoreos)（`istoreos-24.10`） | 内核 6.6、官方软件源、完整应用生态，随上游持续更新 |
+| **设备适配层** | NSY G68 真机验证的 DTS / u-boot / 分区 / 按键配置 | 长按 Reset 进 MaskROM、5 口千兆、eMMC 分区布局 |
+| **网络方案** | RTL8367S + `swconfig` 驱动 | 4 LAN + 1 WAN， DHCP 与 LAN/WAN 开箱即用 |
+
+它**不是裁剪版**：iStoreOS 商店、Docker、文件共享、下载工具等一应俱全。设备适配以“整文件 overlay”方式注入，不在 iStoreOS 上游维护长期分叉，因此上游升级时冲突面最小。
+
+> 需要 **DSA 网络栈**（`lan1`~`lan4` / `wan` 独立网口）而不是 swconfig 的用户，请使用姊妹仓库 [istoreos-hybrid-g68-dsa](https://github.com/iiibeloved/istoreos-hybrid-g68-dsa)。
+
+---
+
+## 二、固件特点
+
+- **刷机省心：长按 Reset 就能进 MaskROM。** 上电时按住 Reset 键即可被 RKDevTool 识别，无需拆机短接测试点；刷写方式与 immortalwrt 固件一致（USB 双公头 + RKDevTool + 强制按地址写）。
+- **5 口全千兆，开箱就能上网。** RTL8367S 交换芯片由 `swconfig` 驱动正确初始化，划分为 **4 个 LAN 口 + 1 个 WAN 口**；LAN 口 DHCP、WAN 口 DHCP 客户端默认可用，插上网线即可获取地址。
+- **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享、NFS、下载 / 文件工具等全部保留，不是精简固件。
+- **稳定可升级。** 每次构建都以 iStoreOS 官方包清单为基准做去重：与官方同名 / 同文件的第三方包一律让位，避免“装得上却用不了”的文件冲突，保证上游更新后仍可重复构建。
+- **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
+- **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
+
+---
+
+## 三、包含内容
+
+### 3.1 主要软件
+
+| 类别 | 代表组件 |
+| --- | --- |
+| 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（初始化向导） |
+| 容器 | `dockerd`、`containerd`、`runc`、`luci-app-dockerman` |
+| 文件共享 | `ksmbd` + `luci-app-ksmbd`（SMB）、NFS |
+| 网络 / DNS | `dnsmasq-full`（DNS + DHCP）、`firewall4`、`netifd` |
+| 下载 / 文件 | 常用下载与文件管理工具 |
+| 其他 | DDNS、内网穿透等 iStoreOS 生态应用 |
+
+> 完整且权威的清单是每次 Release 附件中的 **`packages.manifest`**（当前约 **860~864** 项，含依赖展开）。以该文件为准，不要以本文的概数为准。
+
+### 3.2 网口与网络
+
+| 逻辑接口 | 硬件端口 | 角色 |
+| --- | --- | --- |
+| `lan`（br-lan） | RTL8367S port 0~3 | 4 个 LAN 口，同一网桥，硬件二层转发，DHCP 服务端 |
+| `wan` | RTL8367S port 4 | 1 个 WAN 口，DHCP 客户端（可改 PPPoE） |
+| CPU 上联 | port 6u → `eth0`、port 7u → `eth1` | 交换芯片与 SoC 的两条上联 |
+
+- 物理网口编号与逻辑口（LAN/WAN）的对应以刷机后实测为准（见 [刷机后注意事项](#六刷机后注意事项)）。
+- 面板上的 2.5G 标识口实际按 SGMII **1000 Mb/s** fixed-link 工作（真机实测），不是 2500 Mb/s。
+
+### 3.3 分区布局
+
+| 分区 | 大小 | 用途 |
+| --- | --- | --- |
+| `uboot` | 16 MiB | u-boot / SPL |
+| `kernel` | 16 MiB | 内核 + DTB（FIT 镜像） |
+| `rootfs` | 500 MiB | 只读 squashfs 系统 |
+| `rootfs_data` | 4096 MiB | 可写 overlay（配置、iStore / opkg、Docker 数据） |
+
+> 升级镜像约 **100 MiB**（squashfs 压缩后）；`rootfs_data` 文件系统在首次启动时自动创建。
+
+---
+
+## 四、刷机前注意事项
+
+1. **准备工具**：双公头 USB 数据线、`RKDevTool_Release_v3.18`、驱动 `Rockchip_DriverAssitant_v5.12`，以及**解压成 `.img` 的固件**（刷机工具不认 `.img.gz`）。
+2. **核对文件**：下载后用 `sha256sum -c sha256sums` 校验镜像，不一致请重新下载。
+3. **备份配置**：旧系统还能进入时，先在 LuCI「系统 → 备份/升级」导出配置备份。
+4. **接对 USB 口**：用靠近网口一侧的 **USB OTG 口**连接电脑。
+5. **保证供电**：刷写与首次启动期间**不要断电**，eMMC 写入中断最难恢复。
+6. **理清网口角色**：本固件是 **4 LAN + 1 WAN**；刷机后需按实测确认哪个口是 WAN，再把上级路由 / 光猫接到 WAN 口（见第六节）。
+7. **管理地址预期**：默认网关为 `192.168.1.1`（iStoreOS 默认；若与局域网冲突，以电脑实际获取到的默认网关为准，首次向导中可修改）。
+
+---
+
+## 五、刷机方法
+
+系统能否进入，选择对应方式：
+
+### 5.1 系统还能进 → 在线升级
+
+```
+LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置」（如需清空则不勾）→ 执行
+```
+
+### 5.2 首次刷写 / 进不去系统 → MaskROM（USB 刷机）
+
+1. 电脑安装驱动 `Rockchip_DriverAssitant_v5.12`，打开 `RKDevTool_Release_v3.18`。
+2. 设备**断电**，双公头 USB 线连接电脑与设备 OTG 口。
+3. **按住 Reset 键不松开 → 接通电源 → 待 RKDevTool 提示“发现一个 MaskROM 设备”后松开 Reset。**
+   - 若长按无效，可用拆机短接测试点的传统方式兜底（loader 相同）。
+4. 「高级功能」→ 加载 `rk356x_spl_loader_v1.21.113.bin`。
+5. 「获取当前存储」→「**擦除所有**」，进度到 100% 才算成功（若“秒擦除”，需检查 eMMC）。
+6. 「下载镜像」→ 选择**解压后的 `.img`** → **勾选「强制按地址写」** → 点击「执行」，等到 100% 成功。
+7. 完成后断开 USB、重新上电，接好网线。
+
+> **“强制按地址写”必须勾选**，否则可能写入不完整或校验失败。
+
+---
+
+## 六、刷机后注意事项
+
+> 本节是新旧版本差异最容易被忽略的地方，请按序号操作。
+
+1. **耐心等待首次启动（约 1~3 分钟）。** 首次开机会创建 `rootfs_data` 文件系统并执行初始化脚本，期间网口灯可能闪烁、页面暂时打不开，属正常现象；**不要在此阶段断电或反复重启**。
+2. **进入初始化向导。** 浏览器访问默认网关（通常 `http://192.168.1.1`，或在电脑命令行执行 `ipconfig` / `route -n` 查看默认网关）→ 按 iStoreOS 向导完成设置，并**第一时间修改 root 密码**。
+3. **先确认 LAN，再接 WAN。**
+   - 电脑接任意 LAN 口，应能自动获取 `192.168.1.x` 地址并打开管理页——**能打开管理页，说明交换机驱动与 LAN/DHCP 已正常工作**（旧版“只能当交换机、拿不到 IP”的问题即出在此环节，新固件已修复）。
+   - 再把上级路由 / 光猫的网线接到 **WAN 口**，WAN 默认 DHCP 获取地址；如需 PPPoE，在网络 / 向导中改为拨号并填入账号密码。
+4. **核对网口物理对应。** 逐一插拔网线，确认哪个口是 WAN、哪些是 LAN，并在网络接口页观察连接状态；LAN 口之间应能互相通信，WAN 口不应出现在 br-lan 网桥中。
+5. **验证外网与软件源。** 在“系统 → TTYD / SSH”执行 `ping -c3 223.5.5.5 && opkg update`，全通即表示网络与软件源正常。
+6. **验证 MaskROM 能力（可选）。** 下次需要刷机时，用第五节的长按 Reset 流程验证一次即可；平时不必反复进 MaskROM。
+7. **完成配置后备份。** 系统 → 备份/升级 → 生成配置备份并妥善保存，便于日后恢复。
+8. **常见误区**：
+   - 只接了 LAN 口、没接 WAN → 能进管理页但上不了外网，属正常，接好 WAN 即可。
+   - 上级路由 LAN 口与本机 LAN 同为 `192.168.1.x` → 地址冲突，先在向导里把本机 LAN 改到其它网段。
+   - 面板 2.5G 标识口按 1000 Mb/s 工作 → 规格如此，不是故障。
+
+---
+
+## 七、下载与校验
+
+- **最新 Release**：<https://github.com/iiibeloved/istoreos-hybrid-g68/releases/latest>
+- 版本号、镜像与校验值**以 Release 页面为准**（本仓库会持续更新，本文不写死版本号与哈希，避免过期）。
 
 | 资产 | 说明 |
-|---|---|
-| `istoreos-rockchip-armv8-nsy_g68-plus-squashfs-sysupgrade.img.gz` | 固件镜像（约 **99.9 MiB**） |
+| --- | --- |
+| `istoreos-rockchip-armv8-nsy_g68-plus-squashfs-sysupgrade.img.gz` | 固件镜像（约 100 MiB，刷机前需解压） |
 | `sha256sums` | 镜像校验值 |
-| `packages.manifest` | 本次构建的完整包清单（约 863 项） |
+| `packages.manifest` | 本次构建完整包清单（约 860~864 项） |
 
-最新（`g68-hybrid-2026.11.14-r1`）：
-
-```
-sha256: 2952f78d6398a83538551ad9c7af2db8c37e9e12f6649afef41a733fe36adab0
-```
-
-### 国内加速
+**国内加速**（把 `<tag>` 和 `<file>` 替换为实际版本号与文件名，`https://` 后拼接以下前缀）：
 
 - `https://gh-proxy.com/https://github.com/iiibeloved/istoreos-hybrid-g68/releases/download/<tag>/<file>`
 - `https://ghfast.top/https://github.com/iiibeloved/istoreos-hybrid-g68/releases/download/<tag>/<file>`
@@ -63,115 +168,99 @@ sha256: 2952f78d6398a83538551ad9c7af2db8c37e9e12f6649afef41a733fe36adab0
 
 ---
 
-## 刷机步骤
+## 八、已知限制
 
-1. USB **双公头**线连接电脑与设备（OTG 口，靠网口侧 USB）
-2. 安装 **RKDevTool v3.18** + **驱动 v5.12**
-3. 设备断电 → **按住 Reset** 键 → 上电 → 松开 → RKDevTool 显示 **发现一个 MaskROM 设备**
-4. 「高级功能」→ Boot 选择 `rk356x_spl_loader_v1.21.113.bin`
-5. 「获取当前存储」→「**擦除所有**」
-6. 「下载镜像」选择**解压后的 `.img`** → 勾选「**强制按地址写**」→ 执行
-
-> 若长按无效，可用短接触点法兜底（BROM 模式，loader 相同）。
-> 首次启动约 1–2 分钟，之后进入 iStoreOS 初始化向导。
-
-### 分区布局
-
-| 分区 | 大小 | 用途 |
-|---|---|---|
-| `uboot` | 16 MiB | u-boot / SPL |
-| `kernel` | 16 MiB | 内核 + DTB（FIT） |
-| `rootfs` | **500 MiB** | 只读 squashfs 系统 |
-| `rootfs_data` | 4096 MiB | 可写 overlay（iStore/opkg、Docker 数据、配置） |
-
-> 镜像文件约 100 MiB（squashfs 压缩后），`rootfs_data` 分区在首次启动时自动创建文件系统。
+- **不使用 WiFi**：G68 的 MT7916 未启用（WiFi 栈整体不选），需要无线请另行方案。
+- **SMB 用 ksmbd**：`samba4` 在新工具链下编译失败已排除，SMB 由 `ksmbd` + `luci-app-ksmbd` 提供。
+- **DNS/DHCP 用 `dnsmasq-full`**：与 `dnsmasq` 互斥，二者只能选其一。
+- **SSL 栈为 mbedtls**：不选 `luci-ssl-openssl`（会与基座 `libustream-mbedtls` 冲突）。
+- **2.5G 口实为 1000 Mb/s**：SGMII fixed-link 真机实测值。
+- **需真机验收**：LAN/WAN、eMMC/USB、长按 Reset、中文界面与商城建议实机逐项确认。
 
 ---
 
-## 构建流水线
+## 九、常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| 刷机后只能当交换机、拿不到 IP、无 WAN | 确认所用镜像是带 RTL8367S 驱动的新版（见 Release 的 `packages.manifest` 是否含 `kmod-switch-rtl8367b` / `kmod-switch-rtl8366-smi` / `kmod-swconfig`）；旧版无这些驱动，需重刷新版 |
+| 能进管理页但上不了外网 | 检查 WAN 口是否接了上级路由 / 光猫；WAN 是否为 DHCP；上级 LAN 是否与本机能正常连通 |
+| 管理页打不开 | 用 `ipconfig` 查电脑默认网关再访问；或确认处于同网段；首次启动请等 1~3 分钟 |
+| RKDevTool 找不到 MaskROM 设备 | 检查驱动、USB 线（须为数据线）与 OTG 口；长按 Reset 时序或改用短接触点法 |
+| 刷机中途报错 / 校验失败 | 重新“擦除所有”后勾选“强制按地址写”再刷；核对 sha256 |
+| 商城 / quickstart 无中文 | 确认对应应用已安装后重启（中文为条件投递） |
+
+---
+
+## 十、技术实现（进阶）
+
+### 10.1 为什么叫“杂交”（Hybrid）
+
+不在 iStoreOS 里维护长期分叉的内核 / 设备树；设备层以**整文件 overlay** 交付，上游升级时冲突面最小。
+
+### 10.2 关键机制
+
+- **长按 Reset → MaskROM**：SPL 阶段读 SARADC 通道 0；按住 Reset 上电即写 BROM 下载标志并复位，RKDevTool 直接识别 MaskROM 设备。u-boot 以 overlay-only 覆盖 `src/`，并由三层断言（`download key pressed` / `adc_channel_single_shot` / `BOOT_MODE_REG=0xfdc20200`）守护。
+- **官方基准去重**：每轮构建以官方 defconfig / manifest 为唯一基准，同名 / 同文件 / PROVIDES 冲突项自动注释并回写，保证上游更新后重建可预期。
+- **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
+- **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
+
+### 10.3 构建流水线
 
 ```text
 iStoreOS 官方源 (istoreos-24.10)
-        │  clone
-        ▼
-  apply-device.sh ──► 设备层注入（DTS / u-boot overlay / 内核补丁 / 分区 / i18n）
-        │
-        ▼
-  selftest.sh ──► 静态自检（overlay / defconfig / 补丁 / DTS / 镜像定义）
-        │
-        ▼
-  hw-audit.sh ──► 硬件级审核（DTS ↔ kernel-config ↔ 包集 ↔ u-boot defconfig）
-        │
-        ▼
-  package-guard ──► 以官方包清单为基准去重（同名 / 同文件 / PROVIDES）
-        │
-        ▼
-  uboot-check ──► 只编译 u-boot + 三层产物断言
-        │
-        ▼
-  build ──► 全量编译 → 镜像 → 分区表校验 → artifact → Release → 回写 state 锁
+   │ clone
+   ▼
+apply-device.sh ──► 设备层注入（DTS / u-boot overlay / 内核补丁 / 分区 / i18n）
+   ▼
+selftest.sh ──► 静态自检（overlay / defconfig / 补丁 / DTS / 镜像定义）
+   ▼
+hw-audit.sh ──► 硬件级审核（DTS ↔ kernel-config ↔ 包集 ↔ u-boot defconfig）
+   ▼
+package-guard ──► 以官方清单为基准去重（同名 / 同文件 / PROVIDES）
+   ▼
+uboot-check ──► 只编译 u-boot + 三层产物断言
+   ▼
+build ──► 全量编译 → 镜像 → 分区表校验 → artifact → Release → 回写 state 锁
 ```
 
 | 作业 | 职责 |
-|---|---|
+| --- | --- |
 | `check-upstream` | 对比上游 commit 与 `state` 锁，决定是否构建 |
-| `prepare` | 应用设备层、静态自检、硬件审核、官方基准去重、回写去重结果 |
-| `uboot-check` | 独立编译 u-boot，验证 MaskROM 链路（源码 / 应用后 / 产物） |
-| `build` | 全量编译、镜像校验、Release 发布、`upstream.lock` 回写 |
+| `prepare` | 应用设备层、静态自检、硬件审核、官方基准去重 |
+| `uboot-check` | 独立编译 u-boot，验证 MaskROM 链路 |
+| `build` | 全量编译、镜像校验、发布 Release、回写 `upstream.lock` |
 
 触发方式：`push`（配置变更）、`workflow_dispatch`（手动）、`schedule`（每周检查）、`upstream-watch`（上游变化自动触发）。
 
----
-
-## 仓库结构
+### 10.4 仓库结构
 
 ```text
 device/
   kernel-dts/            G68 内核设备树（SGMII/XPCS、RTL8367S、adc-keys、eMMC）
   kernel-config          内核配置片段（SWCONFIG / RTL8366_SMI / RTL8367B_PHY）
   kernel-files/          内核驱动覆盖（支持 RTL8367S 的 rtl8367b 等，仅内核 6.6）
-  board.d/               板级网络映射 02_network_g68（不修改上游 02_network）
+  board.d/               板级网络映射 02_network_g68（不改上游 02_network）
   kernel-patches/        910/911/913/914 内核补丁
   uboot/                 u-boot overlay（boot_mode、defconfig、板级 dts、版本守卫）
-  i18n-overlay/          中文覆盖（28 个文件，条件投递）
+  i18n-overlay/          中文覆盖（条件投递）
   hw-exemptions.txt      硬件豁免清单（如 WiFi）
-scripts/
-  apply-device.sh        设备层注入（幂等，带版本守卫）
-  selftest.sh            构建前静态自检
-  hw-audit.sh            硬件级内容审核
-  verify-maskrom.sh      MaskROM 三层守卫（repo / applied / built）
-  package-guard.py       官方基准包去重
-  check-partition-table.py  镜像分区表校验
-configs/
-  g68-hybrid.config      完整包配置：显式启用约 730 项，依赖展开后约 863 项（含目标 / 设备 / 分区）
+scripts/                 apply / selftest / hw-audit / verify-maskrom / package-guard 等
+configs/g68-hybrid.config  完整包配置（含目标 / 设备 / 分区）
 .github/workflows/       build / maskrom-guard / package-guard / upstream-watch
 ```
 
----
+### 10.5 不变量（任何改动都不得破坏）
 
-## 不变量（任何改动都不得破坏）
-
-1. **长按 Reset → MaskROM** 链路可用（三层守卫通过）；
-2. **包集以 iStoreOS 官方为基准**去重，不保留会与官方冲突的第三方包；
-3. **中文条件投递**：只在应用已安装时覆盖，不产生孤儿菜单；
-4. **全量包集**（非裁剪版），WiFi 除外；
-5. **上游只认 iStoreOS**，设备层以 overlay 交付。
+1. 长按 Reset → MaskROM 链路可用（三层守卫通过）；
+2. 包集以 iStoreOS 官方为基准去重；
+3. 中文条件投递，不产生孤儿菜单；
+4. 全量包集（非裁剪版），WiFi 除外；
+5. 上游只认 iStoreOS，设备层以 overlay 交付。
 
 ---
 
-## 注意事项 / 已知限制
-
-- **本固件不使用 WiFi**：G68 的 MT7916 未启用（WiFi 栈整体不选），如需无线请勿刷此固件。
-- **SMB 使用 ksmbd**：`samba4` 在新工具链上编译失败，已排除；SMB 共享由 ksmbd + `luci-app-ksmbd` 提供。
-- **DNS/DHCP 使用 `dnsmasq-full`**：config 中显式选 `dnsmasq-full=y`、关闭 `dnsmasq`（`dnsmasq-full` 提供 `dnsmasq` 的全部能力并满足其依赖，二者不能共存）。
-- **SSL 栈为 mbedtls**：不选 `luci-ssl-openssl`（会与基座 `libustream-mbedtls` 冲突）。
-- **2.5G 口**：SGMII 走 fixed-link 1000 Mb/s（真机实测），非 2500 Mb/s。
-- **main 分支受保护**：CI 的构建状态写入 `state` 分支的 `upstream.lock`，`check-upstream` / `upstream-watch` 优先读取该分支。
-- **镜像需真机验收**：LAN/WAN、eMMC/USB、长按 Reset、中文界面与商城均建议实机确认。
-
----
-
-## 本地构建
+## 十一、本地构建
 
 ```sh
 git clone --depth 1 -b istoreos-24.10 https://github.com/istoreos/istoreos.git
@@ -186,22 +275,10 @@ cd istoreos && make defconfig && make -j"$(nproc)"
 
 ---
 
-## 故障排查
-
-| 现象 | 处理 |
-|---|---|
-| 构建报 `check_data_file_clashes` | 按「官方基准去重」规则，移除日志中 `wants to install file` 的第三方包变体 |
-| 构建报 `root.ext4 Error 1` / 空间不足 | 确认 `CONFIG_TARGET_ROOTFS_PARTSIZE` 为 500 |
-| 长按 Reset 无反应 | 检查 Reset 键焊接/排线，或用短接触点法兜底进 MaskROM |
-| 刷机后无法启动 | 重新「擦除所有」后按「强制按地址写」再刷；确认 loader 版本 |
-| 商城/quickstart 无中文 | 确认已安装对应应用后重启（i18n 条件投递） |
-
----
-
 ## 致谢
 
 - [iStoreOS](https://github.com/istoreos/istoreos) —— 系统基座与软件生态
-- [immortalwrt](https://github.com/immortalwrt/immortalwrt) —— 设备层参考与验证经验
+- [immortalwrt](https://github.com/immortalwrt/immortalwrt) —— 设备层参考与真机验证经验
 - 所有上游包维护者
 
 > 本项目仅做设备层移植与 CI 编排，固件内容遵循各上游组件许可证。
