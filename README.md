@@ -24,8 +24,8 @@
 
 - **长按 Reset → MaskROM（无需短接触点）**
   SPL 阶段读 SARADC 通道 0；按住 Reset 上电即写 BROM 下载标志并复位，RKDevTool 直接识别 MaskROM 设备。
-- **全量 iStoreOS 包集（863 个包）**
-  quickstart、iStore 商城、Docker、ksmbd、NFS、下载/文件工具等一应俱全，不是裁剪版。
+- **全量 iStoreOS 包集（约 863 个包，含依赖展开）**
+  quickstart、iStore 商城、Docker、ksmbd、NFS、下载/文件工具等一应俱全，不是裁剪版。实际数量见每次 Release 的 `packages.manifest`。
 - **官方基准去重（硬规则）**
   以 iStoreOS 官方 defconfig / manifest 为唯一基准；第三方与官方**同名**或**同文件**冲突（`dnsmasq` vs `dnsmasq-full`、`libustream` 变体等）一律移除，保证上游更新后重建可预期。
 - **中文条件投递，无孤儿菜单**
@@ -143,7 +143,7 @@ scripts/
   package-guard.py       官方基准包去重
   check-partition-table.py  镜像分区表校验
 configs/
-  g68-hybrid.config      734 个包的完整配置（含目标 / 设备 / 分区）
+  g68-hybrid.config      完整包配置：显式启用约 730 项，依赖展开后约 863 项（含目标 / 设备 / 分区）
 .github/workflows/       build / maskrom-guard / package-guard / upstream-watch
 ```
 
@@ -163,7 +163,7 @@ configs/
 
 - **本固件不使用 WiFi**：G68 的 MT7916 未启用（WiFi 栈整体不选），如需无线请勿刷此固件。
 - **SMB 使用 ksmbd**：`samba4` 在新工具链上编译失败，已排除；SMB 共享由 ksmbd + `luci-app-ksmbd` 提供。
-- **DNS 使用基座 dnsmasq**：不选 `dnsmasq-full`（会与官方包文件冲突）。
+- **DNS/DHCP 使用 `dnsmasq-full`**：config 中显式选 `dnsmasq-full=y`、关闭 `dnsmasq`（`dnsmasq-full` 提供 `dnsmasq` 的全部能力并满足其依赖，二者不能共存）。
 - **SSL 栈为 mbedtls**：不选 `luci-ssl-openssl`（会与基座 `libustream-mbedtls` 冲突）。
 - **2.5G 口**：SGMII 走 fixed-link 1000 Mb/s（真机实测），非 2500 Mb/s。
 - **main 分支受保护**：CI 的构建状态写入 `state` 分支的 `upstream.lock`，`check-upstream` / `upstream-watch` 优先读取该分支。

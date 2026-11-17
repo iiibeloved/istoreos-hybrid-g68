@@ -24,9 +24,11 @@
 | **SPL 阶段读 ADC 通道 0 并触发复位** | 上游需 patch 101 才能让 weak 按键检测在 SPL 生效 | 本仓库 `device/uboot/overlay/` 整文件覆盖（patch 101 等价） |
 
 immortalwrt 侧原实现是 patch 101（修改 `boot_mode.c` / `Makefile` / `rk3568.c`）。
-本仓库改为 **overlay 整文件覆盖**：`device/uboot/overlay/` 保存「u-boot 2024.10 上游
-+ patch 101 等价改动」的完整文件，由 apply-device.sh 把 patches 拷贝到 uboot-rockchip/patches-2024.10（解压官方 tarball 后由 OpenWrt 自动打补丁，取代 src/ 覆盖）
-文件；`OVERLAY_BASE` 锁定基准版本（2024.10），iStoreOS 升级 u-boot 时版本守卫直接
+本仓库改为 **overlay-only 整文件覆盖**：`device/uboot/overlay/` 保存「u-boot 2024.10 上游
++ patch 101 等价改动」的完整文件，由 apply-device.sh 在官方 tarball 解压后把 overlay
+整目录拷入 `package/boot/uboot-rockchip/src/`（`cp -a "$DEV/uboot/overlay/." "$UB/src/"`），
+由 OpenWrt 的 `package.mk` 在 `Build/Prepare` 阶段覆盖进 `PKG_BUILD_DIR`；不使用
+`patches-2024.10` 补丁投递。`OVERLAY_BASE` 锁定基准版本（2024.10），iStoreOS 升级 u-boot 时版本守卫直接
 判构建失败并提示重新生成 overlay，绝不带病构建。
 
 ## 2. 与 immortalwrt 的差异
@@ -35,9 +37,9 @@ immortalwrt 侧原实现是 patch 101（修改 `boot_mode.c` / `Makefile` / `rk3
 | --- | --- | --- |
 | 基座 | ImmortalWrt 24.10（fork） | iStoreOS `istoreos-24.10` |
 | 内核 | 6.6 | 6.6 |
-| u-boot | 2024.10 + patch 101 | 2024.10 + patches-2024.10（patch 101 等价，应用到解压后的 tarball） |
-| 镜像流程 | `pine64-img`（32 MiB 预留，rootfs_data 4096） | `pine64-img`（**16 MiB 预留**，rootfs_data 2048，`RESET000` 标记自动重置） |
-| 分区 | kernel 16M / rootfs 200M / rootfs_data 4096M | kernel 16M / rootfs 200M / **rootfs_data 2048M** |
+| u-boot | 2024.10 + patch 101 | 2024.10 + overlay-only（patch 101 等价，整文件覆盖到 `src/`） |
+| 镜像流程 | `pine64-img`（32 MiB 预留，rootfs_data 4096） | `pine64-img`（**16 MiB 预留**，rootfs_data **4096**，`RESET000` 标记自动重置） |
+| 分区 | kernel 16M / rootfs 500M / rootfs_data 4096M | kernel 16M / rootfs **500M** / rootfs_data **4096M** |
 | 刷机 | 双公头 + RKDevTool + 长按 Reset + **强制按地址写** | **完全一致** |
 | 通用版 | 无自定义 uci-defaults | 无自定义 uci-defaults（本仓库不含任何 init/配置脚本） |
 
@@ -51,8 +53,7 @@ device/
     │   ├── nsy-g68-plus-rk3568_defconfig        # 板级 u-boot defconfig
     │   ├── rk3568-nsy-g68-plus.dts              # u-boot 板级 DTS（&saradc okay / usb）
     │   └── rk3568-nsy-g68-plus-u-boot.dtsi      # u-boot dtsi（emmc 时序）
-    ├── patches/                               # u-boot 2024.10 上游 + patch 101 等价改动（OpenWrt patches 100~106）
-    ├── overlay/                                # 参考用：与 patches 等价的整文件（已不再被 apply-device 拷贝）
+    ├── overlay/                                # 实际投递：整文件覆盖到 uboot-rockchip/src/（overlay-only）
     │   └── arch/arm/mach-rockchip/
     │       ├── boot_mode.c                     # SPL 读 SARADC 通道 0 → 写 BROM 下载标志（核心）
     │       ├── rk3568/rk3568.c                 # spl_board_init → setup_boot_mode 调用链
