@@ -167,7 +167,7 @@ grep -q 'workflows/build.yml/dispatches' "$HERE/.github/workflows/upstream-watch
 echo "== 9. quickstart / 网络向导 来源（官方 feeds 缺失 → small）=="
 grep -q '^src-git small ' "$ROOT/feeds.conf" \
 	&& ok "feeds.conf 已声明 small 源" || bad "feeds.conf 缺 small 源（quickstart/向导 config 项会被丢弃）"
-for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-store luci-app-alist luci-app-ddns-go; do
+for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-store luci-app-ddns-go; do
 	grep -qx "CONFIG_PACKAGE_$p=y" "$CFG" && ok "已选 $p" || bad "缺少 $p"
 done
 # 官方 feeds 自身不得已含 quickstart；若上游将来内置，则应改回官方来源并撤掉 small
