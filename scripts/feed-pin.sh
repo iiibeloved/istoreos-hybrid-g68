@@ -23,7 +23,17 @@ while read -r feed sha rest; do
 		echo "  $feed 已锁定 $sha"
 		continue
 	fi
-	git -C "$d" checkout -q "$sha" || {
+	# iStoreOS 的 src-git 用 git clone --depth 1 浅克隆，锁定提交通常不在
+	# 浅历史里，直接 checkout 会失败。先按需抓取该单个提交（等价 OpenWrt
+	# 官方 init_commit 的 git fetch --depth=1 origin <sha> 做法）。
+	if ! git -C "$d" cat-file -e "$sha^{commit}" 2>/dev/null; then
+		echo "  浅克隆缺少 $sha，按需抓取..."
+		git -C "$d" fetch --depth=1 origin "$sha" >/dev/null 2>&1 || {
+			echo "::error::feed $feed 无法抓取锁定提交 $sha（上游可能已强制推送，需更新 configs/feeds.lock）"
+			exit 1
+		}
+	fi
+	git -C "$d" -c advice.detachedHead=false checkout -q "$sha" || {
 		echo "::error::feed $feed 无法切到锁定提交 $sha（上游可能已强制推送，需更新 configs/feeds.lock）"
 		exit 1
 	}

@@ -359,6 +359,18 @@ jobs:
           cp configs/g68-hybrid.config istoreos/.config
           cd istoreos
           make defconfig 2>&1 | tail -20
+          # ext4 rootfs 二次压回：iStoreOS 基线 TARGET_ROOTFS_EXT4FS 为
+          # "default y if USES_EXT4"，rockchip FEATURES 含 ext4，defconfig 会把它
+          # 拉回 y，镜像阶段对未压缩 rootfs 树（约 691MiB）跑 make_ext4fs -l 500MiB
+          # 必然 out of space。这里在 defconfig 后强制压回并校验。
+          sed -i -E 's/^CONFIG_TARGET_ROOTFS_EXT4FS=y$/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
+          if grep -q '^CONFIG_TARGET_ROOTFS_EXT4FS=y$' .config; then
+            echo "::error::ext4 rootfs 仍为 y，镜像阶段将因 make_ext4fs 容量不足失败"
+            exit 1
+          fi
+          grep -q '^CONFIG_TARGET_ROOTFS_SQUASHFS=y$' .config \
+            || { echo "::error::squashfs 未选中（ext4 关闭后将无可用镜像）"; exit 1; }
+          echo "[OK] ext4 rootfs 已关闭，仅保留 squashfs"
           echo "=== 关键配置确认 ==="
           grep -E "CONFIG_TARGET_rockchip_armv8_DEVICE_nsy_g68-plus|CONFIG_TARGET_KERNEL_PARTSIZE|CONFIG_TARGET_ROOTFS_PARTSIZE|CONFIG_PACKAGE_luci-app-store" .config || true
           grep -q '^CONFIG_PACKAGE_dnsmasq-full=y$' .config || { echo "::error::dnsmasq-full 未选中（DNS 替换失败）"; exit 1; }
@@ -418,8 +430,17 @@ jobs:
       - name: 收集产物
         run: |
           set -eu
-          IMG=$(find istoreos/bin/targets/rockchip/armv8 -name '*nsy_g68-plus*sysupgrade.img.gz' | head -1)
-          [ -n "$IMG" ] || { echo "::error::未找到固件镜像"; ls -l istoreos/bin/targets/rockchip/armv8 2>/dev/null || true; exit 1; }
+          # 产物守卫：只接受 squashfs sysupgrade，禁止 ext4 rootfs 变体混入发布。
+          # 若 defconfig 二次压回失效让 ext4 镜像被造出，这里直接失败而不是发错固件。
+          IDIR=istoreos/bin/targets/rockchip/armv8
+          EXT4_IMG=$(find "$IDIR" -maxdepth 1 -name '*ext4*.img.gz' -print -quit 2>/dev/null || true)
+          if [ -n "$EXT4_IMG" ]; then
+            echo "::error::检测到非预期的 ext4 rootfs 镜像（ext4 应已关闭）: $EXT4_IMG"
+            exit 1
+          fi
+          IMG=$(find "$IDIR" -name '*squashfs-sysupgrade.img.gz' | head -1)
+          [ -n "$IMG" ] || IMG=$(find "$IDIR" -name '*nsy_g68-plus*sysupgrade.img.gz' | head -1)
+          [ -n "$IMG" ] || { echo "::error::未找到 squashfs sysupgrade 固件镜像"; ls -l "$IDIR" 2>/dev/null || true; exit 1; }
           cp "$IMG" .
           # 校验 rootfs_data=4096MiB：必须读 MBR 分区表，不能用镜像体积。
           # 上游 pine64-img 未设置 PADDING，gen_image_generic.sh 不会把 userdata 分区

@@ -36,7 +36,7 @@ warn() { printf '  [WARN] %s\n' "$*"; WARN=$((WARN+1)); }
 # 归一化：大小写、alpha/beta/rc/pre 分隔符、~0 后缀、_ / - 分隔符、重复点
 norm() {
 	echo "$1" | tr '[:upper:]' '[:lower:]' \
-		| sed -E 's/^v//; s/-?(alpha|beta|rc|pre)[._-]*/.\\1./g; s/~[0-9]*//g; s/[_-]+/./g; s/\.\././g; s/\.\././g'
+		| sed -E 's/^v//; s/-?(alpha|beta|rc|pre)[._-]*/.\1./g; s/~[0-9]*//g; s/[_-]+/./g; s/\.\././g; s/\.\././g'
 }
 ver_ge() {
 	a=$(norm "$1"); b=$(norm "$2")
