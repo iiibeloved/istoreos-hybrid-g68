@@ -1,0 +1,8 @@
+#!/bin/sh
+# G68 出厂默认：SMB 服务统一走 samba4。
+# ksmbd-server 与 samba4-server 都监听 TCP 445，同时自启会争用端口；
+# 首次启动即关闭 ksmbd 自启，保证 samba4 开箱即用。
+# 如需改用 ksmbd：在「系统 → 启动项」中禁用 samba4、启用 ksmbd 后重启。
+/etc/init.d/ksmbd disable >/dev/null 2>&1 || true
+/etc/init.d/samba4 enable  >/dev/null 2>&1 || true
+exit 0
