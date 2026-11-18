@@ -46,7 +46,7 @@
 
 - **刷机省心：长按 Reset 就能进 MaskROM。** 上电时按住 Reset 键即可被 RKDevTool 识别，无需拆机短接测试点；刷写方式与 immortalwrt 固件一致（USB 双公头 + RKDevTool + 强制按地址写）。
 - **5 口全千兆，开箱就能上网。** RTL8367S 交换芯片由 `swconfig` 驱动正确初始化，划分为 **4 个 LAN 口 + 1 个 WAN 口**；LAN 口 DHCP、WAN 口 DHCP 客户端默认可用，插上网线即可获取地址。
-- **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享、NFS、下载 / 文件工具等全部保留，不是精简固件。
+- **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享（`samba4` / `ksmbd`）、WebDAV（`unishare` / `webdav2`）、NFS、文件管理 / 传输、定时控制、上网行为管理等应用全部内置，不是精简固件。
 - **稳定可升级、可重复构建。** 每次构建以 iStoreOS 官方包清单为基准去重：同名 / 同文件的第三方包一律让位；滚动 feed 锁定到已验证提交、同名包生效来源统一指定、编译前做全包依赖版本校验，防止上游静默漂移导致“这次能编、下次编不过”。
 - **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
 - **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
@@ -61,9 +61,9 @@
 | --- | --- |
 | 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（初始化向导） |
 | 容器 | `dockerd`、`containerd`、`runc`、`luci-app-dockerman` |
-| 文件共享 | `ksmbd` + `luci-app-ksmbd`（SMB）、NFS |
+| 文件共享 | `samba4` + `luci-app-samba4`、`ksmbd` + `luci-app-ksmbd`（SMB）、`unishare`（统一管理 SMB/WebDAV）、`webdav2`、NFS |
 | 网络 / DNS | `dnsmasq-full`（DNS + DHCP）、`firewall4`、`netifd` |
-| 下载 / 文件 | 常用下载与文件管理工具 |
+| 下载 / 文件 | `luci-app-fileassistant`、`luci-app-filemanager`、`luci-app-filebrowser`、`luci-app-filetransfer` 等 |
 | 其他 | DDNS、内网穿透等 iStoreOS 生态应用 |
 
 > 完整且权威的清单是每次 Release 附件中的 **`packages.manifest`**（当前约 **860~864** 项，含依赖展开）。以该文件为准，不要以本文的概数为准。
@@ -171,7 +171,6 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 ## 八、已知限制
 
 - **不使用 WiFi**：G68 的 MT7916 未启用（WiFi 栈整体不选），需要无线请另行方案。
-- **SMB 用 ksmbd**：`samba4` 在新工具链下编译失败已排除，SMB 由 `ksmbd` + `luci-app-ksmbd` 提供。
 - **DNS/DHCP 用 `dnsmasq-full`**：与 `dnsmasq` 互斥，二者只能选其一。
 - **SSL 栈为 mbedtls**：不选 `luci-ssl-openssl`（会与基座 `libustream-mbedtls` 冲突）。
 - **2.5G 口实为 1000 Mb/s**：SGMII fixed-link 真机实测值。
