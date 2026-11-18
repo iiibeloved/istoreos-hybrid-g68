@@ -12,6 +12,22 @@ bad() { printf '  [FAIL] %s\n' "$*"; FAIL=$((FAIL+1)); }
 echo "== 0. 核心功能守卫（长按 Reset→MaskROM）=="
 sh "$HERE/scripts/verify-maskrom.sh" "$ROOT" || FAIL=$((FAIL+1))
 
+echo "== 0.5 文本文件行尾守卫（CRLF 会让 sh / grep -qx / make defconfig 静默失效）=="
+# 历史事故：configs/g68-hybrid.config 曾被写成 CRLF，使包集自检全项误报；
+# scripts/dep-guard.sh 被写成 CRLF 时，dash 把 `set -u\r` 当成非法选项直接退出。
+# 这里在自检最前端统一拦截，避免同类漂移再进入耗时编译。
+CRCH=$(printf '\r')
+EOL_N=0
+for f in "$HERE"/scripts/*.sh "$HERE"/configs/*.config "$HERE"/.github/workflows/*.yml \
+         "$HERE"/device/files/usr/bin/* "$HERE"/device/files/etc/uci-defaults/*; do
+	[ -f "$f" ] || continue
+	EOL_N=$((EOL_N + 1))
+	if grep -q "$CRCH" "$f"; then
+		bad "$f 含 CRLF 行尾（必须 LF）"
+	fi
+done
+ok "已检查 $EOL_N 个文本文件行尾"
+
 echo "== 1. 内核 DTS 关键节点 =="
 KDTS="$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3568-nsy-g68-plus.dts"
 for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpcs"; do
