@@ -209,7 +209,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **Feed 防漂移（fail-fast）**：滚动 feed 锁到已验证提交（`configs/feeds.lock`），同名包的生效来源统一声明（`configs/feed-precedence.txt`，如 `sing-box` 固定取 `small`）；构建时用 `feed-pin.sh` 固定提交、`feed-sources.sh` 删除其他 feed 的同名链接并重装校验，`dep-guard.sh` 在 `make defconfig` 后遍历所有选中包的版本化依赖做秒级校验。上游 packages 的旧版 `sing-box` 抢占链接、HomeProxy 要求 `>=1.15.0_alpha10` 导致“编译 3 小时后才失败”的问题因此被提前拦截。
 - **只交付 squashfs**：`configs/g68-hybrid.config` 显式关闭 `CONFIG_TARGET_ROOTFS_EXT4FS`、保留 `CONFIG_TARGET_ROOTFS_SQUASHFS=y`，并在 `make defconfig` 后二次压回校验；收集产物时拒绝任何 `*-ext4*.img.gz`。ext4 不压缩（未压缩 rootfs 树约 691 MiB，塞不进 500 MiB 分区），squashfs 压缩后约 100 MiB，故只发布 squashfs 镜像。
 - **Go 工具链放宽**：`alist` / `ddns-go` / `xray` / `sing-box` 等 small feed 的 Go 包要求 Go >= 1.25（早期失败日志：`go: go.mod requires go >= 1.25.0 (running go 1.23.12)`）。`build.yml` 把 `feeds/packages/lang/golang/` 内的 `GOTOOLCHAIN=local` 统一替换为 `auto`，让各包自动获取匹配工具链，并保留「并行编译失败 → `-j1 V=s` 单线程重试」兜底，规避多包并发下载工具链的竞态。AList 曾因此被临时移除，现已恢复并随固件提供。
-- **配置行尾固定为 LF**：`configs/g68-hybrid.config` 必须以 LF 行尾存储。`selftest.sh` 用 `grep -qx` 对 `CONFIG_PACKAGE_xxx=y` 做整行精确匹配，`make defconfig` 也按 LF 解析；若被写成 CRLF，行尾的 `\r` 会让包集自检全项误报、defconfig 静默丢符号。注意：通过 Git Data API 直接创建 blob 会绕过 git 客户端的行尾规范化，提交前务必核对远程 blob 的真实行尾。
+- **文本文件行尾固定为 LF（自检强制）**：`scripts/*.sh`、`configs/*.config`、`.github/workflows/*.yml` 与 `device/files/` 下的脚本必须全部以 LF 存储；`selftest.sh` 第 0.5 节在编译前逐文件扫描 CR 字符并阻断构建。历史上两类事故均由 CRLF 引起：`configs/g68-hybrid.config` 被写成 CRLF 时，行尾 `\r` 让 `grep -qx "CONFIG_PACKAGE_xxx=y"` 全项误报、`make defconfig` 静默丢符号；`scripts/dep-guard.sh` 被写成 CRLF 时，dash 把 `set -u\r` 解析为 `Illegal option`，build 作业在进入编译前直接退出。注意：通过 Git Data API 直接创建 blob 会绕过 git 客户端的行尾规范化，提交前务必核对远程 blob 的真实行尾。
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
 
@@ -221,7 +221,7 @@ iStoreOS 官方源 (istoreos-24.10)
    ▼
 apply-device.sh ──► 设备层注入（DTS / u-boot overlay / 内核补丁 / 分区 / i18n）
    ▼
-selftest.sh ──► 静态自检（overlay / defconfig / 补丁 / DTS / 镜像定义）
+selftest.sh ──► 静态自检（0.5 行尾守卫 / overlay / defconfig / 补丁 / DTS / 镜像定义）
    ▼
 hw-audit.sh ──► 硬件级审核（DTS ↔ kernel-config ↔ 包集 ↔ u-boot defconfig）
    ▼
@@ -276,7 +276,7 @@ configs/
 5. 中文条件投递，不产生孤儿菜单；
 6. 全量包集（非裁剪版），WiFi 除外；
 7. 上游只认 iStoreOS，设备层以 overlay 交付。
-8. `configs/g68-hybrid.config` 保持 **LF 行尾**（CRLF 会让 `grep -qx` 包集自检与 `make defconfig` 静默失效）；
+8. **文本文件行尾 = LF**：`configs/*.config`、`scripts/*.sh`、workflow 与 `device/files/` 下脚本必须全部以 LF 存储，由 `selftest.sh` 第 0.5 节逐文件扫描 CR 并阻断构建（CRLF 会让 `grep -qx` 自检、`make defconfig` 与 `/bin/sh` 的 `set` 指令失效）；
 
 ---
 
@@ -292,7 +292,7 @@ cd istoreos
 sh ../scripts/feed-pin.sh . ../configs/feeds.lock            # 固定滚动 feed
 ./scripts/feeds install -a
 sh ../scripts/feed-sources.sh . ../configs/feed-precedence.txt # 固定同名包来源
-# 该配置必须为 LF 行尾：CRLF 会让 grep -qx 自检与 make defconfig 静默失效
+# 配置文件与所有 scripts/*.sh 必须为 LF 行尾：CRLF 会让 grep -qx 自检、make defconfig 与 /bin/sh 失效
 cp ../configs/g68-hybrid.config .config
 make defconfig
 # defconfig 会把 EXT4FS 拉回 y，必须二次压回（自动构建已内置此步）
