@@ -339,6 +339,19 @@ jobs:
                      shadowsocksr-libev simple-obfs v2ray-plugin chinadns-ng dns2socks microsocks tcping; do
               ./scripts/feeds install "$p" >/dev/null 2>&1 || echo "::warning::feeds install $p 失败（该包将被跳过）"
             done
+            # sing-box 版本对齐：homeproxy(small, 20261111) 要求 sing-box >=1.15.0_alpha10，
+            # 而官方 packages feed 只有 1.12.x（feeds install -a 会先装它并占用同名链接）。
+            # feeds install -f 只覆盖 core 包、对已装 feed 包无效，必须先删官方链接再从 small 装新版。
+            if [ -e package/feeds/packages/sing-box ]; then
+              echo "移除官方旧版 sing-box: $(readlink -f package/feeds/packages/sing-box 2>/dev/null || true)"
+              rm -f package/feeds/packages/sing-box
+            fi
+            ./scripts/feeds install -p small sing-box >/dev/null 2>&1 \
+              || { echo "::error::从 small 安装 sing-box 失败"; exit 1; }
+            SB_SRC=$(readlink -f package/feeds/small/sing-box 2>/dev/null || echo "<未找到>")
+            echo "sing-box 生效源: $SB_SRC"
+            echo "$SB_SRC" | grep -q '/feeds/small/' \
+              || { echo "::error::sing-box 未从 small 生效（homeproxy 依赖将失败）"; exit 1; }
             echo "=== small 已装包 ==="; ls package/feeds/small 2>/dev/null | tr '\n' ' '; echo
             # Go 工具链：iStoreOS 的 golang 1.23 固定 GOTOOLCHAIN=local，而 small 的
             # xray-core / sing-box / alist / ddns-go 的 go.mod 要求 go>=1.25，
@@ -363,6 +376,10 @@ jobs:
             echo "::error::dnsmasq 与 dnsmasq-full 同时选中（PROVIDES 同名，必须互斥）"
             exit 1
           fi
+          # 依赖版本一致性守卫：编译前拦截上游 feed 版本漂移（如 homeproxy 要求
+          # sing-box >=1.15.0_alpha10 而生效源版本过低），避免编译 3 小时后在
+          # package/install 阶段才失败。脚本在仓库根目录，此处 cwd=istoreos。
+          sh ../scripts/dep-guard.sh .
       - name: 缓存 dl
         uses: actions/cache@v4
         with:
