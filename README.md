@@ -47,7 +47,7 @@
 - **刷机省心：长按 Reset 就能进 MaskROM。** 上电时按住 Reset 键即可被 RKDevTool 识别，无需拆机短接测试点；刷写方式与 immortalwrt 固件一致（USB 双公头 + RKDevTool + 强制按地址写）。
 - **5 口全千兆，开箱就能上网。** RTL8367S 交换芯片由 `swconfig` 驱动正确初始化，划分为 **4 个 LAN 口 + 1 个 WAN 口**；LAN 口 DHCP、WAN 口 DHCP 客户端默认可用，插上网线即可获取地址。
 - **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享、NFS、下载 / 文件工具等全部保留，不是精简固件。
-- **稳定可升级。** 每次构建都以 iStoreOS 官方包清单为基准做去重：与官方同名 / 同文件的第三方包一律让位，避免“装得上却用不了”的文件冲突，保证上游更新后仍可重复构建。
+- **稳定可升级、可重复构建。** 每次构建以 iStoreOS 官方包清单为基准去重：同名 / 同文件的第三方包一律让位；滚动 feed 锁定到已验证提交、同名包生效来源统一指定、编译前做全包依赖版本校验，防止上游静默漂移导致“这次能编、下次编不过”。
 - **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
 - **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
 
@@ -202,6 +202,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 
 - **长按 Reset → MaskROM**：SPL 阶段读 SARADC 通道 0；按住 Reset 上电即写 BROM 下载标志并复位，RKDevTool 直接识别 MaskROM 设备。u-boot 以 overlay-only 覆盖 `src/`，并由三层断言（`download key pressed` / `adc_channel_single_shot` / `BOOT_MODE_REG=0xfdc20200`）守护。
 - **官方基准去重**：每轮构建以官方 defconfig / manifest 为唯一基准，同名 / 同文件 / PROVIDES 冲突项自动注释并回写，保证上游更新后重建可预期。
+- **Feed 防漂移（fail-fast）**：滚动 feed 锁到已验证提交（`configs/feeds.lock`），同名包的生效来源统一声明（`configs/feed-precedence.txt`，如 `sing-box` 固定取 `small`）；构建时用 `feed-pin.sh` 固定提交、`feed-sources.sh` 删除其他 feed 的同名链接并重装校验，`dep-guard.sh` 在 `make defconfig` 后遍历所有选中包的版本化依赖做秒级校验。上游 packages 的旧版 `sing-box` 抢占链接、HomeProxy 要求 `>=1.15.0_alpha10` 导致“编译 3 小时后才失败”的问题因此被提前拦截。
+- **只交付 squashfs**：`configs/g68-hybrid.config` 显式关闭 `CONFIG_TARGET_ROOTFS_EXT4FS`、保留 `CONFIG_TARGET_ROOTFS_SQUASHFS=y`，并在 `make defconfig` 后二次压回校验；收集产物时拒绝任何 `*-ext4*.img.gz`。ext4 不压缩（未压缩 rootfs 树约 691 MiB，塞不进 500 MiB 分区），squashfs 压缩后约 100 MiB，故只发布 squashfs 镜像。
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
 
@@ -219,17 +221,20 @@ hw-audit.sh ──► 硬件级审核（DTS ↔ kernel-config ↔ 包集 ↔ u-b
    ▼
 package-guard ──► 以官方清单为基准去重（同名 / 同文件 / PROVIDES）
    ▼
-uboot-check ──► 只编译 u-boot + 三层产物断言
+uboot-check ──► feed-pin 固定提交 → 只编译 u-boot + 三层产物断言
    ▼
-build ──► 全量编译 → 镜像 → 分区表校验 → artifact → Release → 回写 state 锁
+build ──► feed-pin 锁定滚动 feed → feed-sources 固定同名包来源
+          → defconfig → 关闭 ext4 / 保留 squashfs → dep-guard 依赖版本守卫
+          → 全量编译 → 仅收集 squashfs 镜像 → 分区表校验
+          → artifact → Release → 回写 state 锁
 ```
 
 | 作业 | 职责 |
 | --- | --- |
 | `check-upstream` | 对比上游 commit 与 `state` 锁，决定是否构建 |
 | `prepare` | 应用设备层、静态自检、硬件审核、官方基准去重 |
-| `uboot-check` | 独立编译 u-boot，验证 MaskROM 链路 |
-| `build` | 全量编译、镜像校验、发布 Release、回写 `upstream.lock` |
+| `uboot-check` | `feed-pin` 固定提交后独立编译 u-boot，验证 MaskROM 链路 |
+| `build` | 固定 feed 提交与同名包来源、defconfig 归一化（关闭 ext4）、依赖版本守卫、全量编译、仅接受 squashfs 镜像并校验、发布 Release、回写 `upstream.lock` |
 
 触发方式：`push`（配置变更）、`workflow_dispatch`（手动）、`schedule`（每周检查）、`upstream-watch`（上游变化自动触发）。
 
@@ -246,7 +251,13 @@ device/
   i18n-overlay/          中文覆盖（条件投递）
   hw-exemptions.txt      硬件豁免清单（如 WiFi）
 scripts/                 apply / selftest / hw-audit / verify-maskrom / package-guard 等
-configs/g68-hybrid.config  完整包配置（含目标 / 设备 / 分区）
+  feed-pin.sh            按 feeds.lock 固定滚动 feed 提交（防 main 漂移）
+  feed-sources.sh        按 feed-precedence.txt 固定同名包的生效来源
+  dep-guard.sh           defconfig 后全包依赖版本一致性守卫（fail-fast）
+configs/
+  g68-hybrid.config      完整包配置（含目标 / 设备 / 分区，显式关闭 ext4 rootfs）
+  feeds.lock            滚动 feed 的已验证提交
+  feed-precedence.txt   同名包生效来源优先级
 .github/workflows/       build / maskrom-guard / package-guard / upstream-watch
 ```
 
@@ -254,9 +265,11 @@ configs/g68-hybrid.config  完整包配置（含目标 / 设备 / 分区）
 
 1. 长按 Reset → MaskROM 链路可用（三层守卫通过）；
 2. 包集以 iStoreOS 官方为基准去重；
-3. 中文条件投递，不产生孤儿菜单；
-4. 全量包集（非裁剪版），WiFi 除外；
-5. 上游只认 iStoreOS，设备层以 overlay 交付。
+3. 滚动 feed 锁到已验证提交、同名包来源固定、依赖版本守卫通过（防静默漂移）；
+4. 仅交付 squashfs 镜像，ext4 rootfs 始终关闭；
+5. 中文条件投递，不产生孤儿菜单；
+6. 全量包集（非裁剪版），WiFi 除外；
+7. 上游只认 iStoreOS，设备层以 overlay 交付。
 
 ---
 
@@ -267,8 +280,17 @@ git clone --depth 1 -b istoreos-24.10 https://github.com/istoreos/istoreos.git
 sh scripts/apply-device.sh istoreos          # 注入设备层
 sh scripts/selftest.sh istoreos              # 静态自检
 sh scripts/hw-audit.sh                       # 硬件审核
-cp configs/g68-hybrid.config istoreos/.config
-cd istoreos && make defconfig && make -j"$(nproc)"
+cd istoreos
+./scripts/feeds update -a
+sh ../scripts/feed-pin.sh . ../configs/feeds.lock            # 固定滚动 feed
+./scripts/feeds install -a
+sh ../scripts/feed-sources.sh . ../configs/feed-precedence.txt # 固定同名包来源
+cp ../configs/g68-hybrid.config .config
+make defconfig
+# defconfig 会把 EXT4FS 拉回 y，必须二次压回（自动构建已内置此步）
+sed -i -E 's/^CONFIG_TARGET_ROOTFS_EXT4FS=y$/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
+sh ../scripts/dep-guard.sh . ../configs/feed-precedence.txt  # 依赖版本守卫
+make -j"$(nproc)"
 ```
 
 产物：`istoreos/bin/targets/rockchip/armv8/*nsy_g68-plus*sysupgrade.img.gz`
