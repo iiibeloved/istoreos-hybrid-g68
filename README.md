@@ -49,6 +49,7 @@
 - **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享（`samba4` / `ksmbd`）、WebDAV（`unishare` / `webdav2`）、NFS、文件管理 / 传输、定时控制、上网行为管理等应用全部内置，不是精简固件。
 - **稳定可升级、可重复构建。** 每次构建以 iStoreOS 官方包清单为基准去重：同名 / 同文件的第三方包一律让位；滚动 feed 锁定到已验证提交、同名包生效来源统一指定、编译前做全包依赖版本校验，防止上游静默漂移导致“这次能编、下次编不过”。
 - **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
+- **完整生态含 Go 应用。** AList（网盘聚合）、DDNS-Go、Lucky 等要求较新 Go 版本的应用已随固件编译提供；构建侧通过 `GOTOOLCHAIN=auto` 与单线程重试兜底消除工具链竞态（见「技术实现」）。
 - **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
 
 ---
@@ -59,14 +60,17 @@
 
 | 类别 | 代表组件 |
 | --- | --- |
-| 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（初始化向导） |
+| 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（初始化向导）、`luci-app-netwizard`（网络向导） |
 | 容器 | `dockerd`、`containerd`、`runc`、`luci-app-dockerman` |
-| 文件共享 | `samba4` + `luci-app-samba4`、`ksmbd` + `luci-app-ksmbd`（SMB）、`unishare`（统一管理 SMB/WebDAV）、`webdav2`、NFS |
-| 网络 / DNS | `dnsmasq-full`（DNS + DHCP）、`firewall4`、`netifd` |
-| 下载 / 文件 | `luci-app-fileassistant`、`luci-app-filemanager`、`luci-app-filebrowser`、`luci-app-filetransfer` 等 |
-| 其他 | DDNS、内网穿透等 iStoreOS 生态应用 |
+| 文件共享 | `samba4-server` + `luci-app-samba4`、`ksmbd-server` + `luci-app-ksmbd`（SMB）、`unishare`、`webdav2`、`nfs-kernel-server` |
+| 网盘 / 下载 | `luci-app-alist`（AList 网盘聚合，含中文）、`lucky` + `luci-app-lucky`、`luci-app-fileassistant`、`luci-app-filemanager`、`luci-app-filebrowser`、`luci-app-filetransfer` |
+| 网络 / DNS | `dnsmasq-full`（DNS + DHCP）、`firewall4`、`netifd`、`luci-app-openclash` / `luci-app-passwall` / `luci-app-homeproxy` |
+| 系统 / 管控 | `luci-app-diskman` + `smartmontools`（磁盘健康）、`luci-app-timecontrol`、`luci-app-control-webrestriction`、`luci-app-control-weburl`、`luci-app-wolplus`、`luci-app-argon-config` |
+| 其他 | `luci-app-ddns-go`、内网穿透等 iStoreOS 生态应用 |
 
-> 完整且权威的清单是每次 Release 附件中的 **`packages.manifest`**（当前约 **860~864** 项，含依赖展开）。以该文件为准，不要以本文的概数为准。
+> SMB 共享出厂默认启用 `samba4`、不自启 `ksmbd`（两者都监听 TCP 445，同时自启会争用端口），详见[刷机后注意事项](#六刷机后注意事项)。
+>
+> 完整且权威的清单是每次 Release 附件中的 **`packages.manifest`**（含依赖展开，数量随每次构建与上游变化）。本表只列代表组件：配置文件直接选中约 **740** 项，依赖展开后更多；一律以该 manifest 为准。
 
 ### 3.2 网口与网络
 
@@ -159,7 +163,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 | --- | --- |
 | `istoreos-rockchip-armv8-nsy_g68-plus-squashfs-sysupgrade.img.gz` | 固件镜像（约 100 MiB，刷机前需解压） |
 | `sha256sums` | 镜像校验值 |
-| `packages.manifest` | 本次构建完整包清单（约 860~864 项） |
+| `packages.manifest` | 本次构建完整包清单（含依赖展开，以 Release 附件为准） |
 
 **国内加速**（把 `<tag>` 和 `<file>` 替换为实际版本号与文件名，`https://` 后拼接以下前缀）：
 
@@ -204,6 +208,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **官方基准去重**：每轮构建以官方 defconfig / manifest 为唯一基准，同名 / 同文件 / PROVIDES 冲突项自动注释并回写，保证上游更新后重建可预期。
 - **Feed 防漂移（fail-fast）**：滚动 feed 锁到已验证提交（`configs/feeds.lock`），同名包的生效来源统一声明（`configs/feed-precedence.txt`，如 `sing-box` 固定取 `small`）；构建时用 `feed-pin.sh` 固定提交、`feed-sources.sh` 删除其他 feed 的同名链接并重装校验，`dep-guard.sh` 在 `make defconfig` 后遍历所有选中包的版本化依赖做秒级校验。上游 packages 的旧版 `sing-box` 抢占链接、HomeProxy 要求 `>=1.15.0_alpha10` 导致“编译 3 小时后才失败”的问题因此被提前拦截。
 - **只交付 squashfs**：`configs/g68-hybrid.config` 显式关闭 `CONFIG_TARGET_ROOTFS_EXT4FS`、保留 `CONFIG_TARGET_ROOTFS_SQUASHFS=y`，并在 `make defconfig` 后二次压回校验；收集产物时拒绝任何 `*-ext4*.img.gz`。ext4 不压缩（未压缩 rootfs 树约 691 MiB，塞不进 500 MiB 分区），squashfs 压缩后约 100 MiB，故只发布 squashfs 镜像。
+- **Go 工具链放宽**：`alist` / `ddns-go` / `xray` / `sing-box` 等 small feed 的 Go 包要求 Go >= 1.25（早期失败日志：`go: go.mod requires go >= 1.25.0 (running go 1.23.12)`）。`build.yml` 把 `feeds/packages/lang/golang/` 内的 `GOTOOLCHAIN=local` 统一替换为 `auto`，让各包自动获取匹配工具链，并保留「并行编译失败 → `-j1 V=s` 单线程重试」兜底，规避多包并发下载工具链的竞态。AList 曾因此被临时移除，现已恢复并随固件提供。
+- **配置行尾固定为 LF**：`configs/g68-hybrid.config` 必须以 LF 行尾存储。`selftest.sh` 用 `grep -qx` 对 `CONFIG_PACKAGE_xxx=y` 做整行精确匹配，`make defconfig` 也按 LF 解析；若被写成 CRLF，行尾的 `\r` 会让包集自检全项误报、defconfig 静默丢符号。注意：通过 Git Data API 直接创建 blob 会绕过 git 客户端的行尾规范化，提交前务必核对远程 blob 的真实行尾。
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
 
@@ -270,6 +276,7 @@ configs/
 5. 中文条件投递，不产生孤儿菜单；
 6. 全量包集（非裁剪版），WiFi 除外；
 7. 上游只认 iStoreOS，设备层以 overlay 交付。
+8. `configs/g68-hybrid.config` 保持 **LF 行尾**（CRLF 会让 `grep -qx` 包集自检与 `make defconfig` 静默失效）；
 
 ---
 
@@ -285,6 +292,7 @@ cd istoreos
 sh ../scripts/feed-pin.sh . ../configs/feeds.lock            # 固定滚动 feed
 ./scripts/feeds install -a
 sh ../scripts/feed-sources.sh . ../configs/feed-precedence.txt # 固定同名包来源
+# 该配置必须为 LF 行尾：CRLF 会让 grep -qx 自检与 make defconfig 静默失效
 cp ../configs/g68-hybrid.config .config
 make defconfig
 # defconfig 会把 EXT4FS 拉回 y，必须二次压回（自动构建已内置此步）
