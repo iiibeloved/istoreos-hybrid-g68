@@ -1,0 +1,4 @@
+# 同名包生效来源（pkg  优先feed）
+# 官方 packages 的 sing-box 版本滞后于 small；HomeProxy 要求 >=1.15.0_alpha10。
+# feed-sources.sh 按此表删其他 feed 同名链接并重装；dep-guard.sh 按此表校验。
+sing-box small

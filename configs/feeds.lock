@@ -1,0 +1,6 @@
+# 滚动 feed 锁定提交（feed  sha）
+# small 跟随 kenzok8/small-package main，版本约束会静默漂移；
+# 此提交已验证：luci-app-homeproxy 20261117 要求 sing-box >=1.15.0_alpha10，
+# sing-box PKG_UPSTREAM_VERSION=1.15.0-alpha.13。
+# 需要升级时：更新 small 后跑 dep-guard.sh 验证，再改本文件提交。
+small 8b7bd991eccfd8e7c048b16da6b755cce029fac8
