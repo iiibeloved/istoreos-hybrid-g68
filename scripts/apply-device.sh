@@ -202,7 +202,7 @@ FCL="$ROOT/feeds.conf"
 [ -f "$FCL" ] || cp "$ROOT/feeds.conf.default" "$FCL"
 if ! grep -q '^src-git small ' "$FCL"; then
 	echo 'src-git small https://github.com/kenzok8/small-package.git;main' >> "$FCL"
-	say "feeds.conf: 已追加 small 源（quickstart / 网络向导 / alist / ddns-go）"
+	say "feeds.conf: 已追加 small 源（quickstart / 网络向导 / ddns-go）"
 else
 	say "feeds.conf: small 源已存在"
 fi

@@ -49,7 +49,7 @@
 - **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享（`samba4` / `ksmbd`）、WebDAV（`unishare` / `webdav2`）、NFS、文件管理 / 传输、定时控制、上网行为管理等应用全部内置，不是精简固件。
 - **稳定可升级、可重复构建。** 每次构建以 iStoreOS 官方包清单为基准去重：同名 / 同文件的第三方包一律让位；滚动 feed 锁定到已验证提交、同名包生效来源统一指定、编译前做全包依赖版本校验，防止上游静默漂移导致“这次能编、下次编不过”。
 - **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
-- **完整生态含 Go 应用。** AList（网盘聚合）、DDNS-Go、Lucky 等要求较新 Go 版本的应用已随固件编译提供；构建侧通过 `GOTOOLCHAIN=auto` 与单线程重试兜底消除工具链竞态（见「技术实现」）。
+- **完整生态含 Go 应用。** DDNS-Go、Lucky 等要求较新 Go 版本的应用已随固件编译提供；构建侧通过 `GOTOOLCHAIN=auto` 与单线程重试兜底消除工具链竞态（见「技术实现」）。
 - **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
 
 ---
@@ -63,7 +63,7 @@
 | 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（初始化向导）、`luci-app-netwizard`（网络向导） |
 | 容器 | `dockerd`、`containerd`、`runc`、`luci-app-dockerman` |
 | 文件共享 | `samba4-server` + `luci-app-samba4`、`ksmbd-server` + `luci-app-ksmbd`（SMB）、`unishare`、`webdav2`、`nfs-kernel-server` |
-| 网盘 / 下载 | `luci-app-alist`（AList 网盘聚合，含中文）、`lucky` + `luci-app-lucky`、`luci-app-fileassistant`、`luci-app-filemanager`、`luci-app-filebrowser`、`luci-app-filetransfer` |
+| 网盘 / 下载 | `lucky` + `luci-app-lucky`、`luci-app-fileassistant`、`luci-app-filemanager`、`luci-app-filebrowser`、`luci-app-filetransfer` |
 | 网络 / DNS | `dnsmasq-full`（DNS + DHCP）、`firewall4`、`netifd`、`luci-app-openclash` / `luci-app-passwall` / `luci-app-homeproxy` |
 | 系统 / 管控 | `luci-app-diskman` + `smartmontools`（磁盘健康）、`luci-app-timecontrol`、`luci-app-control-webrestriction`、`luci-app-control-weburl`、`luci-app-wolplus`、`luci-app-argon-config` |
 | 其他 | `luci-app-ddns-go`、内网穿透等 iStoreOS 生态应用 |
@@ -208,7 +208,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **官方基准去重**：每轮构建以官方 defconfig / manifest 为唯一基准，同名 / 同文件 / PROVIDES 冲突项自动注释并回写，保证上游更新后重建可预期。
 - **Feed 防漂移（fail-fast）**：滚动 feed 锁到已验证提交（`configs/feeds.lock`），同名包的生效来源统一声明（`configs/feed-precedence.txt`，如 `sing-box` 固定取 `small`）；构建时用 `feed-pin.sh` 固定提交、`feed-sources.sh` 删除其他 feed 的同名链接并重装校验，`dep-guard.sh` 在 `make defconfig` 后遍历所有选中包的版本化依赖做秒级校验。上游 packages 的旧版 `sing-box` 抢占链接、HomeProxy 要求 `>=1.15.0_alpha10` 导致“编译 3 小时后才失败”的问题因此被提前拦截。
 - **只交付 squashfs**：`configs/g68-hybrid.config` 显式关闭 `CONFIG_TARGET_ROOTFS_EXT4FS`、保留 `CONFIG_TARGET_ROOTFS_SQUASHFS=y`，并在 `make defconfig` 后二次压回校验；收集产物时拒绝任何 `*-ext4*.img.gz`。ext4 不压缩（未压缩 rootfs 树约 691 MiB，塞不进 500 MiB 分区），squashfs 压缩后约 100 MiB，故只发布 squashfs 镜像。
-- **Go 工具链放宽**：`alist` / `ddns-go` / `xray` / `sing-box` 等 small feed 的 Go 包要求 Go >= 1.25（早期失败日志：`go: go.mod requires go >= 1.25.0 (running go 1.23.12)`）。`build.yml` 把 `feeds/packages/lang/golang/` 内的 `GOTOOLCHAIN=local` 统一替换为 `auto`，让各包自动获取匹配工具链，并保留「并行编译失败 → `-j1 V=s` 单线程重试」兜底，规避多包并发下载工具链的竞态。AList 曾因此被临时移除，现已恢复并随固件提供。
+- **Go 工具链放宽**：`ddns-go` / `xray` / `sing-box` 等 small feed 的 Go 包要求 Go >= 1.25（早期失败日志：`go: go.mod requires go >= 1.25.0 (running go 1.23.12)`）。`build.yml` 把 `feeds/packages/lang/golang/` 内的 `GOTOOLCHAIN=local` 统一替换为 `auto`，让各包自动获取匹配工具链，并保留「并行编译失败 → `-j1 V=s` 单线程重试」兜底，规避多包并发下载工具链的竞态。
 - **文本文件行尾固定为 LF（自检强制）**：`scripts/*.sh`、`configs/*.config`、`.github/workflows/*.yml` 与 `device/files/` 下的脚本必须全部以 LF 存储；`selftest.sh` 第 0.5 节在编译前逐文件扫描 CR 字符并阻断构建。历史上两类事故均由 CRLF 引起：`configs/g68-hybrid.config` 被写成 CRLF 时，行尾 `\r` 让 `grep -qx "CONFIG_PACKAGE_xxx=y"` 全项误报、`make defconfig` 静默丢符号；`scripts/dep-guard.sh` 被写成 CRLF 时，dash 把 `set -u\r` 解析为 `Illegal option`，build 作业在进入编译前直接退出。注意：通过 Git Data API 直接创建 blob 会绕过 git 客户端的行尾规范化，提交前务必核对远程 blob 的真实行尾。
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。

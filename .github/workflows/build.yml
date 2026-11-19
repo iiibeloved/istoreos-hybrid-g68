@@ -336,7 +336,7 @@ jobs:
             ./scripts/feeds update -a >/dev/null
             sh ../scripts/feed-pin.sh . ../configs/feeds.lock
             ./scripts/feeds install -a >/dev/null
-            for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-alist alist \
+            for p in quickstart luci-app-quickstart luci-app-netwizard \
                      luci-app-ddns-go ddns-go \
                      luci-app-openclash luci-app-passwall luci-app-homeproxy \
                      sing-box xray-core geoview smartdns haproxy shadowsocks-rust \
@@ -347,7 +347,7 @@ jobs:
             sh ../scripts/feed-sources.sh . ../configs/feed-precedence.txt
             echo "=== small 已装包 ==="; ls package/feeds/small 2>/dev/null | tr '\n' ' '; echo
             # Go 工具链：iStoreOS 的 golang 1.23 固定 GOTOOLCHAIN=local，而 small 的
-            # xray-core / sing-box / alist / ddns-go 的 go.mod 要求 go>=1.25，
+            # xray-core / sing-box / ddns-go 的 go.mod 要求 go>=1.25，
             # local 模式下必然报 "requires go >= 1.25.0"。改为 auto：
             # go 按各包 go.mod 自动下载所需 host 工具链（仅 host 端自举，
             # 交叉编译目标仍是 aarch64_generic）。

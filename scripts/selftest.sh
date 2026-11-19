@@ -185,7 +185,7 @@ grep -q 'workflows/build.yml/dispatches' "$HERE/.github/workflows/upstream-watch
 echo "== 9. quickstart / 网络向导 来源（官方 feeds 缺失 → small）=="
 grep -q '^src-git small ' "$ROOT/feeds.conf" \
 	&& ok "feeds.conf 已声明 small 源" || bad "feeds.conf 缺 small 源（quickstart/向导 config 项会被丢弃）"
-for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-store luci-app-alist luci-app-ddns-go; do
+for p in quickstart luci-app-quickstart luci-app-netwizard luci-app-store luci-app-ddns-go; do
 	grep -qx "CONFIG_PACKAGE_$p=y" "$CFG" && ok "已选 $p" || bad "缺少 $p"
 done
 # 官方 feeds 自身不得已含 quickstart；若上游将来内置，则应改回官方来源并撤掉 small
@@ -229,7 +229,7 @@ done
 echo "== 12. Go 工具链放宽（small 的 Go 包要求 go>=1.25）=="
 grep -q 'GOTOOLCHAIN=local/GOTOOLCHAIN=auto' "$HERE/.github/workflows/build.yml" \
 	&& ok "build.yml 已把 GOTOOLCHAIN 改为 auto" \
-	|| bad "build.yml 未放宽 GOTOOLCHAIN（xray/sing-box/alist/ddns-go 会编译失败）"
+	|| bad "build.yml 未放宽 GOTOOLCHAIN（xray/sing-box/ddns-go 会编译失败）"
 
 if [ "$FAIL" -gt 0 ]; then
 	echo "自检失败：$FAIL 项"
