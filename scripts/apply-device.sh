@@ -195,9 +195,9 @@ if [ -f "$DEV/kernel-config" ]; then
 fi
 
 # ---------- 7.7) 第三方 feed：iStoreOS 官方 feeds 缺失的 quickstart / 网络向导 ----------
-# 官方 feeds（packages / luci / store / third）不含 quickstart、luci-app-quickstart、
-# luci-app-netwizard，config 中对应项会被 defconfig 静默丢弃 → 固件既无 iStoreOS 首页
-# 也无"网络向导"。这里只声明 small 源；安装由 build.yml 按名执行，避免 install -a 覆盖官方同名包。
+# 官方 feeds（packages / luci / store / third）不含 quickstart、luci-app-quickstart，
+# config 中对应项会被 defconfig 静默丢弃 → 固件既无 iStoreOS 首页也无"网络向导"。
+# 这里只声明 small 源；安装由 build.yml 按名执行，避免 install -a 覆盖官方同名包。
 FCL="$ROOT/feeds.conf"
 [ -f "$FCL" ] || cp "$ROOT/feeds.conf.default" "$FCL"
 if ! grep -q '^src-git small ' "$FCL"; then

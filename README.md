@@ -60,7 +60,7 @@
 
 | 类别 | 代表组件 |
 | --- | --- |
-| 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（初始化向导）、`luci-app-netwizard`（网络向导） |
+| 商店 / 向导 | `luci-app-store`（iStore 商城）、`luci-app-quickstart`（首页与网络向导） |
 | 容器 | `dockerd`、`containerd`、`runc`、`luci-app-dockerman` |
 | 文件共享 | `samba4-server` + `luci-app-samba4`、`ksmbd-server` + `luci-app-ksmbd`（SMB）、`unishare`、`webdav2`、`nfs-kernel-server` |
 | 网盘 / 下载 | `lucky` + `luci-app-lucky`、`luci-app-fileassistant`、`luci-app-filemanager`、`luci-app-filebrowser`、`luci-app-filetransfer` |
@@ -147,7 +147,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 6. **验证 MaskROM 能力（可选）。** 下次需要刷机时，用第五节的长按 Reset 流程验证一次即可；平时不必反复进 MaskROM。
 7. **完成配置后备份。** 系统 → 备份/升级 → 生成配置备份并妥善保存，便于日后恢复。
 8. **SMB 服务默认已配好，开箱即用。** 固件内置 `samba4-server` 与 `ksmbd-server` 两套 SMB 服务端，二者都监听 TCP **445** 端口，同时自启会争用端口。已通过首次启动脚本默认**启用 samba4、禁用 ksmbd 自启**，无需手动干预即可使用 SMB 共享。若确需改用 ksmbd：在「系统 → 启动项」中禁用 `samba4`、启用 `ksmbd` 并重启即可，SMB 文件共享功能本身不受影响。
-9. **常见误区**：
+9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能。
+10. **常见误区**：
    - 只接了 LAN 口、没接 WAN → 能进管理页但上不了外网，属正常，接好 WAN 即可。
    - 上级路由 LAN 口与本机 LAN 同为 `192.168.100.x` → 地址冲突，先在向导里把本机 LAN 改到其它网段。
    - 面板 2.5G 标识口按 1000 Mb/s 工作 → 规格如此，不是故障。
