@@ -140,7 +140,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 1. **耐心等待首次启动（约 1~3 分钟）。** 首次开机会创建 `rootfs_data` 文件系统并执行初始化脚本，期间网口灯可能闪烁、页面暂时打不开，属正常现象；**不要在此阶段断电或反复重启**。
 2. **进入初始化向导。** 浏览器访问默认网关（通常 **`http://192.168.100.1`**，或在电脑命令行执行 `ipconfig` / `route -n` 查看默认网关）→ 按 iStoreOS 向导完成设置，并**第一时间修改 root 密码**。
 3. **先确认 LAN，再接 WAN。**
-   - 电脑接任意 LAN 口，应能自动获取 `192.168.100.x` 地址并打开管理页——**能打开管理页，说明交换机驱动与 LAN/DHCP 已正常工作**（旧版“只能当交换机、拿不到 IP”的问题即出在此环节，新固件已修复）。
+   - 电脑接任意 LAN 口，应能自动获取 `192.168.100.x` 地址并打开管理页——**能打开管理页，说明交换机驱动、用户态 `swconfig`（应用 VLAN）与 LAN/DHCP 都已正常工作**（旧版“只能当交换机、拿不到 IP”的问题即出在此环节，新固件已修复；若新版仍拿不到 IP，按[第九节 FAQ](#九常见问题) 的 `swconfig` 排查项核对 `packages.manifest`）。
    - 再把上级路由 / 光猫的网线接到 **WAN 口**，WAN 默认 DHCP 获取地址；如需 PPPoE，在网络 / 向导中改为拨号并填入账号密码。
 4. **核对网口物理对应。** 逐一插拔网线，确认哪个口是 WAN、哪些是 LAN，并在网络接口页观察连接状态；LAN 口之间应能互相通信，WAN 口不应出现在 br-lan 网桥中。
 5. **验证外网与软件源。** 在“系统 → TTYD / SSH”执行 `ping -c3 223.5.5.5 && opkg update`，全通即表示网络与软件源正常。
@@ -187,7 +187,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 
 | 现象 | 处理 |
 | --- | --- |
-| 刷机后只能当交换机、拿不到 IP、无 WAN | 确认所用镜像是带 RTL8367S 驱动的新版（见 Release 的 `packages.manifest` 是否含 `kmod-switch-rtl8367b` / `kmod-switch-rtl8366-smi` / `kmod-swconfig`）；旧版无这些驱动，需重刷新版 |
+| 刷机后只能当交换机、拿不到 IP、无 WAN | 依次确认 Release 的 `packages.manifest`：① 三个内核驱动 `kmod-switch-rtl8367b` / `kmod-switch-rtl8366-smi` / `kmod-swconfig`；② **用户态 `swconfig`（关键）**——它安装 `/lib/network/switch.sh`，由 `init_switch()` 执行 `swconfig dev switch0 load network` 把 UCI 里的 VLAN 分组真正写入 RTL8367S。**只有 kmod 而缺用户态 `swconfig` 时，VLAN 分组不会生效，同样拿不到 IP**（旧版即此问题）。任一项缺失都需重刷带修复的新版 |
 | 能进管理页但上不了外网 | 检查 WAN 口是否接了上级路由 / 光猫；WAN 是否为 DHCP；上级 LAN 是否与本机能正常连通 |
 | 管理页打不开 | 用 `ipconfig` 查电脑默认网关再访问；或确认处于同网段；首次启动请等 1~3 分钟 |
 | RKDevTool 找不到 MaskROM 设备 | 检查驱动、USB 线（须为数据线）与 OTG 口；长按 Reset 时序或改用短接触点法 |
