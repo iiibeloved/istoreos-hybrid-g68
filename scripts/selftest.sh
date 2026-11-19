@@ -131,7 +131,9 @@ for f in $(cd "$DEV/kernel-files/generic" && find . -type f | sed 's|^\./||'); d
 done
 grep -q 'realtek,rtl8367s' "$DEV/kernel-files/generic/drivers/net/phy/rtl8367b.c" \
 	&& ok "rtl8367b 驱动含 realtek,rtl8367s" || bad "rtl8367b 驱动缺 RTL8367S 支持"
-for pkg in kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b; do
+# swconfig 用户态工具是 VLAN 分组生效的必要条件，内核 kmod 无法替代；
+# 缺它则 LAN 口桥接建不起来（真机拿不到 IP），必须一并断言。
+for pkg in swconfig kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b; do
 	grep -qx "CONFIG_PACKAGE_$pkg=y" "$HERE/configs/g68-hybrid.config" \
 		&& ok "包 $pkg" || bad "缺包 $pkg"
 done

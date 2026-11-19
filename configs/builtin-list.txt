@@ -523,7 +523,7 @@ sing-box
 smartd
 smartmontools
 smartmontools-drivedb
-# swconfig  # [package-guard] 上游默认已内置同名包，上游优先
+swconfig
 tar
 taskd
 tc-tiny

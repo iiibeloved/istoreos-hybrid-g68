@@ -111,7 +111,9 @@ jobs:
             --hybrid-config configs/g68-hybrid.config \
             --out-dir package-guard-out \
             --json package-guard-out/report.json \
-            --md package-guard-out/report.md
+            --md package-guard-out/report.md \
+            --allow dnsmasq-full \
+            --allow swconfig
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           d = json.load(open('package-guard-out/report.json', encoding='utf-8'))['counts']

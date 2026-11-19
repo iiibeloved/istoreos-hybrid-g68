@@ -176,6 +176,9 @@ jobs:
           args+=(--json package-guard-out/report.json)
           args+=(--md package-guard-out/report.md)
           args+=(--allow dnsmasq-full)
+          # swconfig：上游 rockchip 默认走 DSA，不含此用户态工具；
+          # 但 G68 hybrid 的 swconfig 交换路线必须用它应用 VLAN，豁免去重注释。
+          args+=(--allow swconfig)
           [ -f configs/builtin-list.txt ] && args+=(--builtin-list configs/builtin-list.txt)
           for f in istoreos/feeds/*.index; do [ -f "$f" ] && args+=(--index "$f"); done
           args+=(--makefile-dir istoreos/package --makefile-dir istoreos/feeds)
