@@ -1,0 +1,10 @@
+{
+	"admin/status/modemmanager": {
+		"depends": {
+			"acl": [ "luci-proto-modemmanager" ],
+			"fs": {
+				"/usr/share/luci/menu.d/luci-proto-modemmanager.json": "absent"
+			}
+		}
+	}
+}
