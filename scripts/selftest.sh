@@ -51,7 +51,7 @@ for f in "$DEV"/kernel-patches/*.patch; do
 	ls "$ROOT/target/linux/rockchip/patches-6.6/$base" >/dev/null 2>&1 && ok "内核补丁 $base" || bad "缺内核补丁 $base"
 done
 # 关键功能补丁（XPCS / SGMII 2.5G / dwmac）必须存在
-for p in 910 911 913; do
+for p in 910 911 913 915; do
 	ls "$ROOT/target/linux/rockchip/patches-6.6/${p}-"*.patch >/dev/null 2>&1 && ok "关键补丁 ${p}-*" || bad "缺关键补丁 ${p}-*"
 done
 

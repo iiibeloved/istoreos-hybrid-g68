@@ -1,0 +1,34 @@
+From: G68 hybrid CI <ci@local>
+Subject: [PATCH] net: stmmac: dwmac-rk: program SGMII MAC select for RK3568 GMAC1
+
+iStoreOS 6.6.144 combphy does not support rockchip,sgmii-mac-sel; program
+PIPE_GRF_XPCS_CON0 bit1 from dwmac-rk so GMAC1's SGMII link can come up.
+
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c
+@@ -85,4 +85,5 @@ struct rk_priv_data {
+ 	struct regmap *grf;
+ 	struct regmap *php_grf;
+ 	struct regmap *xpcs;
++	struct regmap *pipe_grf;
+ };
+@@ -1163,6 +1164,13 @@ static void rk3568_set_to_sgmii(struct rk_priv_data *bsp_priv)
+ 	con1 = (bsp_priv->id == 1) ? RK3568_GRF_GMAC1_CON1 :
+ 				     RK3568_GRF_GMAC0_CON1;
+ 	regmap_write(bsp_priv->grf, con1, RK3568_GMAC_GMII_MODE);
++
++	if (!IS_ERR(bsp_priv->pipe_grf))
++		regmap_update_bits(bsp_priv->pipe_grf,
++				   RK3568_PIPE_GRF_XPCS_CON0,
++				   RK3568_PIPE_GRF_XPCS_SGMII_MAC_SEL,
++				   bsp_priv->id == 1 ?
++				   RK3568_PIPE_GRF_XPCS_SGMII_MAC_SEL : 0);
+ 
+ 	xpcs_setup(bsp_priv, PHY_INTERFACE_MODE_SGMII);
+ }
+@@ -1849,3 +1856,5 @@ static struct rk_priv_data *rk_gmac_setup(struct platform_device *pdev)
+ 	bsp_priv->xpcs = syscon_regmap_lookup_by_phandle(dev->of_node,
+ 							 "rockchip,xpcs");
++	bsp_priv->pipe_grf = syscon_regmap_lookup_by_phandle(dev->of_node,
++							     "rockchip,pipegrf");
+ 	if (!IS_ERR(bsp_priv->xpcs)) {

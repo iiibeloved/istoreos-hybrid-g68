@@ -188,7 +188,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 
 | 现象 | 处理 |
 | --- | --- |
-| 刷机后只能当交换机、拿不到 IP、无 WAN | 依次确认 Release 的 `packages.manifest`：① 三个内核驱动 `kmod-switch-rtl8367b` / `kmod-switch-rtl8366-smi` / `kmod-swconfig`；② **用户态 `swconfig`（关键）**——它安装 `/lib/network/switch.sh`，由 `init_switch()` 执行 `swconfig dev switch0 load network` 把 UCI 里的 VLAN 分组真正写入 RTL8367S。**只有 kmod 而缺用户态 `swconfig` 时，VLAN 分组不会生效，同样拿不到 IP**（旧版即此问题）。任一项缺失都需重刷带修复的新版 |
+| 刷机后只能当交换机、拿不到 IP、无 WAN | 依次确认 Release 的 `packages.manifest`：① 三个内核驱动 `kmod-switch-rtl8367b` / `kmod-switch-rtl8366-smi` / `kmod-swconfig`；② **用户态 `swconfig`（关键）**——它安装 `/lib/network/switch.sh`，由 `init_switch()` 执行 `swconfig dev switch0 load network` 把 UCI 里的 VLAN 分组真正写入 RTL8367S。**只有 kmod 而缺用户态 `swconfig` 时，VLAN 分组不会生效，同样拿不到 IP**（旧版即此问题）。③ 若以上齐全仍拿不到 IP，多为 SGMII CPU 上联未编程 MAC select（内核补丁 `915`）——判别方法：串口下 `ping -I br-lan -c 5 <同网段地址>` 后对比 `ip -s link show eth0` 的 TX 与 `swconfig dev switch0 port 6 get mib` 的 `ifInOctets`，**TX 增长但 port6 的 `ifInOctets` 恒为 0 即可确诊**。本固件已包含该修复。任一项缺失都需重刷带修复的新版 |
 | 能进管理页但上不了外网 | 检查 WAN 口是否接了上级路由 / 光猫；WAN 是否为 DHCP；上级 LAN 是否与本机能正常连通 |
 | 管理页打不开 | 用 `ipconfig` 查电脑默认网关再访问；或确认处于同网段；首次启动请等 1~3 分钟 |
 | RKDevTool 找不到 MaskROM 设备 | 检查驱动、USB 线（须为数据线）与 OTG 口；长按 Reset 时序或改用短接触点法 |
