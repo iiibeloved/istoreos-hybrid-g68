@@ -36,6 +36,14 @@ done
 # 上游升级时板级文件必须保持库存版本（防止被上游同名文件覆盖而改变网络/maskrom 行为）
 cmp -s "$DEV/kernel-dts/rk3568-nsy-g68-plus.dts" "$KDTS" \
 	&& ok "kernel dts 与库存逐字节一致" || bad "kernel dts 与库存不一致"
+# 网络链路 DTS 锚点（915 生效所需 pipegrf phandle + sgmii-mac-sel + RTL8367S 节点）
+# 逐字节比对只保证"投递的=库存的"，无法保证"库存内容本身正确"。这里校验锚点，
+# 防止上游同名 dts 结构变化或维护时误删关键节点导致编译成功但 LAN 全瘫。
+if [ -s "$HERE/scripts/verify-network.sh" ]; then
+	sh "$HERE/scripts/verify-network.sh" dts "$KDTS" || FAIL=$((FAIL+1))
+else
+	bad "缺 verify-network.sh（网络链路应用后守卫）"
+fi
 for f in rk3568-nsy-g68-plus.dts rk3568-nsy-g68-plus-u-boot.dtsi; do
 	cmp -s "$DEV/uboot/static/$f" "$UB/src/arch/arm/dts/$f" \
 		&& ok "uboot $f 与库存一致" || bad "uboot $f 不一致"
@@ -145,6 +153,11 @@ done
 	&& ok "build.yml 已挂 defconfig 后守卫" || bad "build.yml 缺 defconfig 后网络包守卫"
 [ "$(grep -c 'verify-critical.sh manifest' "$HERE/.github/workflows/build.yml")" -ge 1 ] \
 	&& ok "build.yml 已挂 manifest 守卫" || bad "build.yml 缺 manifest 网络包守卫"
+# 应用后网络守卫：脚本存在 + build.yml 在编译产物阶段挂载 source 检查，防被误摘。
+[ -s "$HERE/scripts/verify-network.sh" ] \
+	&& ok "verify-network.sh 存在" || bad "缺 verify-network.sh（网络应用后守卫）"
+[ "$(grep -c 'verify-network.sh source' "$HERE/.github/workflows/build.yml")" -ge 1 ] \
+	&& ok "build.yml 已挂编译后网络应用守卫" || bad "build.yml 缺编译后网络应用守卫（补丁 hunk 漂移无人拦截）"
 
 echo "== 7. 板级网络映射（独立 board.d，不依赖上游 02_network）=="
 BDDST="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network_g68"

@@ -454,6 +454,16 @@ jobs:
           # dd 填零，镜像文件只有 kernel+rootfs（约 216 MiB），但分区表标称 4096 MiB。
           # check-partition-table.py 只读 gzip 流前 512 字节，无需解压整盘。
           python3 scripts/check-partition-table.py "$IMG" "$ROOTFS_DATA_PARTSIZE"
+          # 网络链路"应用后"守卫：包齐全 ≠ 网络可用。上游增量改动 dwmac-rk.c /
+          # rk3568 dts 上下文会让 910/913/915 内核补丁 hunk 静默 FAILED，编译仍成功
+          # 但刷入后 LAN 拿不到 IP（历史事故 c6d9bc6）。这里检查打过补丁的内核源码
+          # 确实含 MAC select 编程 / fixed-link 处理 / RTL8367S 驱动，缺任一禁止发布。
+          KDIR=$(ls -d istoreos/build_dir/target-*/linux-rockchip_armv8/linux-6.6.* 2>/dev/null | head -1 || true)
+          [ -n "$KDIR" ] || { echo "::error::找不到打补丁后的内核源码树，无法验证网络补丁生效"; exit 1; }
+          sh scripts/verify-network.sh source "$KDIR"
+          dts=$(ls istoreos/build_dir/target-*/linux-rockchip_armv8/linux-6.6.*/arch/arm64/boot/dts/rockchip/rk3568-nsy-g68-plus.dts 2>/dev/null | head -1 || true)
+          [ -n "$dts" ] && sh scripts/verify-network.sh dts "$dts" \
+            || echo "::warning::未在内核源码树找到板级 dts（prepare 阶段已校验投递版，跳过产物级 dts 复查）"
           SHA=$(sha256sum "$(basename "$IMG")" | awk '{print $1}')
           CNT=$(grep -h ' - ' istoreos/bin/targets/rockchip/armv8/*.manifest 2>/dev/null | wc -l)
           cat istoreos/bin/targets/rockchip/armv8/*.manifest > ./packages.manifest

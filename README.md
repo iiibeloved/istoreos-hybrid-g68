@@ -217,6 +217,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
 - **核心网络包双阶段守卫**：`scripts/verify-critical.sh` 在 `build` 作业里跑两次——`make defconfig` 之后查真实 `.config`（防上游 feed 漂移把 swconfig 四件套 / dnsmasq-full 静默丢弃，秒级失败而非编译 5 小时后才发现），收集产物时再查最终 `packages.manifest`（确保镜像里确实含包，缺任一则禁止发布 Release）。`selftest.sh` 另断言这两个调用点与脚本本身存在，防止守卫被误摘。
+- **网络链路应用后守卫（补丁生效验证）**：`scripts/verify-network.sh` 解决"包齐全但网络死"的盲区。上游每次增量提交都可能改动 `dwmac-rk.c` / rk3568 dts 的上下文，使内核补丁 hunk 静默 FAILED——历史事故 `c6d9bc6` 即 915 补丁 hunk 失败后编译仍"成功"、刷入后 LAN 拿不到 IP。`verify-network.sh source` 在编译后检查打过补丁的内核源码确实含 910（SGMII 支持）、913（fixed-link 强制速率）、915（`pipe_grf` 成员 + `PIPE_GRF_XPCS_SGMII_MAC_SEL` 编程 + `pipegrf` phandle 读取）与 RTL8367S 驱动 overlay；`verify-network.sh dts` 在 prepare 与产物两阶段检查板级 DTS 的 `sgmii-mac-sel`/`pipegrf`/`phy-mode=sgmii`/RTL8367S switch/xpcs 节点。任一锚点缺失即禁止发布。`selftest.sh` 断言脚本存在且 build.yml 挂载点齐全，防被误摘。
 - **服务菜单 Modem 项隐藏**：`device/files/usr/share/luci/menu.d/zz-hide-modem.json` 用 `menu.d` 后加载覆盖 + `depends.fs` 恒假机制隐藏 `admin/status/modemmanager` 节点（`zz-` 排序在 `luci-` 之后），只隐藏入口，不删包、不删拨号脚本 / ACL，4G/5G WWAN 功能保留。
 
 ### 10.3 构建流水线
@@ -248,7 +249,7 @@ build ──► feed-pin 锁定滚动 feed → feed-sources 固定同名包来�
 | `check-upstream` | 对比上游 commit 与 `state` 锁，决定是否构建 |
 | `prepare` | 应用设备层、静态自检、硬件审核、官方基准去重 |
 | `uboot-check` | `feed-pin` 固定提交后独立编译 u-boot，验证 MaskROM 链路 |
-| `build` | 固定 feed 提交与同名包来源、defconfig 归一化（关闭 ext4）、依赖版本守卫、核心网络包双阶段守卫、全量编译、仅接受 squashfs 镜像并校验、发布 Release、回写 `upstream.lock` |
+| `build` | 固定 feed 提交与同名包来源、defconfig 归一化（关闭 ext4）、依赖版本守卫、核心网络包双阶段守卫、全量编译、**网络链路补丁生效守卫（source+dts）**、仅接受 squashfs 镜像并校验、发布 Release、回写 `upstream.lock` |
 
 触发方式：`push`（配置变更）、`workflow_dispatch`（手动）、`schedule`（每周检查）、`upstream-watch`（上游变化自动触发）。
 
@@ -270,6 +271,7 @@ scripts/                 apply / selftest / hw-audit / verify-maskrom / verify-c
   feed-sources.sh        按 feed-precedence.txt 固定同名包的生效来源
   dep-guard.sh           defconfig 后全包依赖版本一致性守卫（fail-fast）
   verify-critical.sh     核心网络包双阶段守卫（defconfig 后 + 最终 manifest）
+  verify-network.sh      网络链路应用后守卫（编译后补丁 hunk 生效 + 板级 DTS 锚点）
 configs/
   g68-hybrid.config      完整包配置（含目标 / 设备 / 分区，显式关闭 ext4 rootfs）
   feeds.lock            滚动 feed 的已验证提交
@@ -289,6 +291,7 @@ configs/
 8. **文本文件行尾 = LF**：`configs/*.config`、`scripts/*.sh`、workflow 与 `device/files/` 下脚本必须全部以 LF 存储，由 `selftest.sh` 第 0.5 节逐文件扫描 CR 并阻断构建（CRLF 会让 `grep -qx` 自检、`make defconfig` 与 `/bin/sh` 的 `set` 指令失效）；
 9. **核心网络包双阶段守卫通过**：defconfig 展开后的 `.config` 与最终 `packages.manifest` 都必须含 swconfig 四件套 + dnsmasq-full；
 10. **服务菜单 Modem 入口保持隐藏**：`zz-hide-modem.json` 覆盖必须投递且 `depends.fs` 逻辑不被破坏（WWAN 拨号功能保留）。
+11. **内核补丁必须真实生效**：编译后打过补丁的 `dwmac-rk.c` 必须含 910/913/915 的应用后代码，板级 DTS 必须含 `pipegrf`/`sgmii-mac-sel`。包齐全 ≠ 网络可用（历史事故：补丁 hunk 静默失败导致刷入后 LAN 全瘫）。
 
 ### 10.6 上游更新不变量如何被守住
 
@@ -299,7 +302,7 @@ configs/
 | **网络映射**（4 LAN + 1 WAN，port 6u→eth0 / 7u→eth1） | 独立 `board.d/02_network_g68`，按字母序排在上游 `02_network` **之后**加载；不改上游文件 | `selftest` §7 逐字节比对 + 语法 / 双上联断言；上游改 `02_network` 不影响本文件 |
 | **RTL8367S 驱动** | `device/kernel-files/generic/` 整文件 overlay 覆盖上游 `rtl8367b.c` 等 | `selftest` §6 逐字节比对 + `realtek,rtl8367s` 关键字；内核版本非 6.6 时 `apply-device.sh` 直接失败 |
 | **VLAN 落地**（用户态 `swconfig`） | config 明确选中 + package-guard `--allow swconfig` 豁免去重 | `selftest` §6 查 config 输入；`verify-critical.sh` 在 defconfig 后与 manifest 各查一次真实包集 |
-| **SGMII MAC select**（915 补丁，修 LAN 拿不到 IP） | `device/kernel-patches/915-*.patch` 随每次构建投递 | `selftest` §2 关键补丁 910/911/913/915 齐备；`hw-audit` H4 确认 sgmii-mac-sel 由补丁提供 |
+| **SGMII MAC select**（915 补丁，修 LAN 拿不到 IP） | `device/kernel-patches/915-*.patch` 随每次构建投递 | `selftest` §2 补丁投递齐备 + §1 DTS 锚点；`verify-network.sh source` 编译后确认 `dwmac-rk.c` 真含 `pipe_grf` + `PIPE_GRF_XPCS_SGMII_MAC_SEL` + `pipegrf` 读取（hunk 静默失败即刻阻断，历史事故 c6d9bc6 不再重演）；`dts` 模式确认 `sgmii-mac-sel`/`pipegrf` phandle |
 | **长按 Reset → MaskROM** | u-boot overlay-only（4 文件整文件覆盖 + 版本锁 `OVERLAY_BASE`），不用 patch | `verify-maskrom.sh` 三层断言：repo 内容 / 应用后源码树 / 编译产物二进制字符串 + `.config` 寄存器 |
 | **DNS 唯一性**（dnsmasq-full 替代 dnsmasq） | config 显式二选一 | `selftest` §10 + defconfig 检查 + `verify-critical.sh` 三处确认互斥 |
 
@@ -327,6 +330,10 @@ sed -i -E 's/^CONFIG_TARGET_ROOTFS_EXT4FS=y$/# CONFIG_TARGET_ROOTFS_EXT4FS is no
 sh ../scripts/dep-guard.sh . ../configs/feed-precedence.txt  # 依赖版本守卫
 sh ../scripts/verify-critical.sh config .config              # 核心网络包守卫（defconfig 后）
 make -j"$(nproc)"
+# 编译后确认内核补丁真实生效（hunk 静默失败会让编译仍成功但 LAN 全瘫）
+KDIR=$(ls -d build_dir/target-*/linux-rockchip_armv8/linux-6.6.* | head -1)
+sh ../scripts/verify-network.sh source "$KDIR"               # 补丁 hunk 应用后守卫
+sh ../scripts/verify-network.sh dts device/kernel-dts/rk3568-nsy-g68-plus.dts
 ```
 
 产物：`istoreos/bin/targets/rockchip/armv8/*nsy_g68-plus*sysupgrade.img.gz`
