@@ -256,7 +256,10 @@ grep -q 'GOTOOLCHAIN=local/GOTOOLCHAIN=auto' "$HERE/.github/workflows/build.yml"
 	&& ok "build.yml 已把 GOTOOLCHAIN 改为 auto" \
 	|| bad "build.yml 未放宽 GOTOOLCHAIN（xray/sing-box/ddns-go 会编译失败）"
 
-echo "== 13. 服务菜单：隐藏顶级 Modem + Samba4 标签 =="
+echo "== 13. 服务菜单：隐藏顶级 Modem + Samba4 标签（纵深防御）=="
+# 主动防线已在编译期禁用整个蜂窝栈（见 §14 / verify-critical）。
+# 本节的 menu.d 覆盖 + sms.lua entry 注释是纵深兜底：即便上游意外带回
+# luci-app-sms-tool，Modem 菜单也不会露出。两者都保留，不冲突。
 # 顶级 Modem 来自 luci-app-sms-tool 的 controller entry({"admin","modem"},...)，
 # 与 zz-hide-modem.json 原覆盖的 admin/status/modemmanager 不是同一节点。
 # 真机实测：仅 menu.d 覆盖会被 controller 重算为 satisfied=true（仍显示）；
@@ -280,6 +283,12 @@ grep -q 'admin/services/samba4' "$SAMBA_JSON" 2>/dev/null \
 	&& ok "覆盖 Samba4 菜单节点" || bad "zz-samba4-label.json 缺 admin/services/samba4"
 grep -q '网络共享++' "$SAMBA_JSON" 2>/dev/null \
 	&& ok "Samba4 标签=网络共享++（与 ksmbd 区分）" || bad "Samba4 标签未设为网络共享++"
+
+echo "== 14. 编译期蜂窝能力整体移除（主动防线，fail-fast）=="
+# 复用 verify-critical 的 config 守卫：既查网络生命线齐全，又查 22 个蜂窝包
+# 全部为 'is not set'、且 SMSC 以太网 PHY 驱动仍保留。清单只在 verify-critical
+# 维护一份，避免两处漂移。上游/去重把任一蜂窝包带回即在此失败。
+sh "$HERE/scripts/verify-critical.sh" config "$CFG" || FAIL=$((FAIL+1))
 
 if [ "$FAIL" -gt 0 ]; then
 	echo "自检失败：$FAIL 项"

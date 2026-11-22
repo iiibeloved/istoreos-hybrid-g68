@@ -27,6 +27,11 @@ FILE="${2:?用法: verify-critical.sh config|<manifest> <文件>}"
 [ -f "$FILE" ] || { echo "::error::关键包守卫: 文件不存在 $FILE"; exit 1; }
 
 CRIT="swconfig kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b dnsmasq-full"
+# 蜂窝能力整体移除（用户决策 2026-11-22）：固件不含任何 4G/5G/短信应用，
+# 但保留 kmod-phy-smsc / kmod-usb-net-smsc95xx（SMSC 以太网 PHY 驱动，名字含 sms 但与蜂窝无关）。
+# 上游 feed 漂移或 package-guard 去重可能把这些包重新带入，必须在两阶段拦截。
+CELLULAR="adb-enablemodem kmod-qmi_wwan_m kmod-qmi_wwan_q kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan kmod-usb-serial-wwan libmbim libqmi libqrtr-glib luci-app-modem luci-app-sms-tool luci-i18n-modem-zh-cn luci-proto-3g luci-proto-modemmanager luci-proto-qmi modemmanager qmi-utils quectel-CM-5G sms-tool umbim uqmi wwan"
+SMSC_NET="kmod-phy-smsc kmod-usb-net-smsc95xx"
 FAIL=0
 ok()  { printf '  [OK]   %s\n' "$*"; }
 bad() { printf '  [FAIL] %s\n' "$*"; FAIL=$((FAIL+1)); }
@@ -52,6 +57,31 @@ if [ "$MODE" = "config" ]; then
 		ok "dnsmasq 未与 dnsmasq-full 冲突"
 	fi
 fi
+
+echo
+echo "== [guard] 蜂窝能力已整体移除（$MODE: $FILE）=="
+# 任何蜂窝包被重新选中/进入产物即失败
+for p in $CELLULAR; do
+	case "$MODE" in
+		config)   pat="^CONFIG_PACKAGE_${p}=y$" ;;
+		manifest) pat="^${p} - " ;;
+	esac
+	if grep -qE "$pat" "$FILE"; then
+		bad "蜂窝包 $p 被重新引入（用户要求整体移除蜂窝能力）"
+	fi
+done
+# 反向守卫：SMSC 以太网 PHY 绝不能被误禁（名字含 sms 但是网络驱动）
+for p in $SMSC_NET; do
+	case "$MODE" in
+		config)   pat="^CONFIG_PACKAGE_${p}=y$" ;;
+		manifest) pat="^${p} - " ;;
+	esac
+	if grep -qE "$pat" "$FILE"; then
+		ok "SMSC 网络驱动 $p 保留"
+	else
+		bad "SMSC 网络驱动 $p 缺失（误禁会破坏网络，与蜂窝无关）"
+	fi
+done
 
 echo
 if [ "$FAIL" -gt 0 ]; then
