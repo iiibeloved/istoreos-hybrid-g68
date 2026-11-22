@@ -137,6 +137,14 @@ for pkg in swconfig kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b; 
 	grep -qx "CONFIG_PACKAGE_$pkg=y" "$HERE/configs/g68-hybrid.config" \
 		&& ok "包 $pkg" || bad "缺包 $pkg"
 done
+# 核心网络包守卫脚本必须存在，且 build.yml 必须在 defconfig 后与 manifest 阶段各调用一次；
+# 防止上游更新/误操作把这道 fail-fast 守卫摘掉后，包漂移无人拦截。
+[ -s "$HERE/scripts/verify-critical.sh" ] \
+	&& ok "verify-critical.sh 存在" || bad "缺 verify-critical.sh（网络包 fail-fast 守卫）"
+[ "$(grep -c 'verify-critical.sh config' "$HERE/.github/workflows/build.yml")" -ge 1 ] \
+	&& ok "build.yml 已挂 defconfig 后守卫" || bad "build.yml 缺 defconfig 后网络包守卫"
+[ "$(grep -c 'verify-critical.sh manifest' "$HERE/.github/workflows/build.yml")" -ge 1 ] \
+	&& ok "build.yml 已挂 manifest 守卫" || bad "build.yml 缺 manifest 网络包守卫"
 
 echo "== 7. 板级网络映射（独立 board.d，不依赖上游 02_network）=="
 BDDST="$ROOT/target/linux/rockchip/armv8/base-files/etc/board.d/02_network_g68"

@@ -104,7 +104,7 @@ if [ -n "$COMPHY_PATCH" ]; then
 		warn "检测到 combphy 补丁，当前内核版本 ${KV:-未知}，需确认不会与上游冲突"
 	fi
 else
-	warn "无 combphy 补丁（912 已删除，但 iStoreOS 是否内置 sgmii-mac-sel 待真机验证；见下方提示）"
+	warn "无 combphy 补丁（912 已删除；SGMII MAC select 现由 915-dwmac-rk-sgmii-mac-sel.patch 在 dwmac-rk 中编程 PIPE_GRF_XPCS_CON0，真机已验证 LAN 正常）"
 fi
 
 if dts_has 'sgmii-mac-sel'; then

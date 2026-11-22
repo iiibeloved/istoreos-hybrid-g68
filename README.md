@@ -48,6 +48,7 @@
 - **5 口全千兆，开箱就能上网。** RTL8367S 交换芯片由 `swconfig` 驱动正确初始化，划分为 **4 个 LAN 口 + 1 个 WAN 口**；LAN 口 DHCP、WAN 口 DHCP 客户端默认可用，插上网线即可获取地址。
 - **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享（`samba4` / `ksmbd`）、WebDAV（`unishare` / `webdav2`）、NFS、文件管理 / 传输、定时控制、上网行为管理等应用全部内置，不是精简固件。
 - **稳定可升级、可重复构建。** 每次构建以 iStoreOS 官方包清单为基准去重：同名 / 同文件的第三方包一律让位；滚动 feed 锁定到已验证提交、同名包生效来源统一指定、编译前做全包依赖版本校验，防止上游静默漂移导致“这次能编、下次编不过”。
+- **核心功能有“双阶段 fail-fast”守卫。** 上游更新自动重建，但网络生命线包（swconfig 四件套 + dnsmasq-full）与长按进 MaskROM 链路在 **defconfig 展开后** 和 **最终镜像 manifest** 各校验一次，缺一即停止构建 / 禁止发布；DTS、u-boot overlay、板级网络映射全部以整文件 overlay 投递并逐字节比对，上游改同名文件也盖不掉本机的网络与按键行为（详见[10.6 上游更新不变量](#106-上游更新不变量如何被守住)）。
 - **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
 - **完整生态含 Go 应用。** DDNS-Go、Lucky 等要求较新 Go 版本的应用已随固件编译提供；构建侧通过 `GOTOOLCHAIN=auto` 与单线程重试兜底消除工具链竞态（见「技术实现」）。
 - **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
@@ -147,7 +148,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 6. **验证 MaskROM 能力（可选）。** 下次需要刷机时，用第五节的长按 Reset 流程验证一次即可；平时不必反复进 MaskROM。
 7. **完成配置后备份。** 系统 → 备份/升级 → 生成配置备份并妥善保存，便于日后恢复。
 8. **SMB 服务默认已配好，开箱即用。** 固件内置 `samba4-server` 与 `ksmbd-server` 两套 SMB 服务端，二者都监听 TCP **445** 端口，同时自启会争用端口。已通过首次启动脚本默认**启用 samba4、禁用 ksmbd 自启**，无需手动干预即可使用 SMB 共享。若确需改用 ksmbd：在「系统 → 启动项」中禁用 `samba4`、启用 `ksmbd` 并重启即可，SMB 文件共享功能本身不受影响。
-9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能；服务菜单中 `wol` 显示为“网络唤醒”、`wolplus` 显示为“网络唤醒++”，便于区分。
+9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能；服务菜单中 `wol` 显示为“网络唤醒”、`wolplus` 显示为“网络唤醒++”，便于区分。服务菜单中的 **Modem**（蜂窝网络）入口已隐藏——它来自 `luci-proto-modemmanager` 自带的 LuCI 菜单节点，本固件通过 `menu.d` 覆盖文件隐藏该入口，但 **4G/5G WWAN 拨号能力、脚本与 ACL 完整保留**，需要蜂窝网络时功能不受影响。
 10. **常见误区**：
    - 只接了 LAN 口、没接 WAN → 能进管理页但上不了外网，属正常，接好 WAN 即可。
    - 上级路由 LAN 口与本机 LAN 同为 `192.168.100.x` → 地址冲突，先在向导里把本机 LAN 改到其它网段。
@@ -194,6 +195,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 | RKDevTool 找不到 MaskROM 设备 | 检查驱动、USB 线（须为数据线）与 OTG 口；长按 Reset 时序或改用短接触点法 |
 | 刷机中途报错 / 校验失败 | 重新“擦除所有”后勾选“强制按地址写”再刷；核对 sha256 |
 | 商城 / quickstart 无中文 | 确认对应应用已安装后重启（中文为条件投递） |
+| 服务菜单里找不到 Modem / Cellular Network | 这是刻意隐藏的（`menu.d` 覆盖），不影响 4G/5G 拨号；WWAN 配置仍在「网络 → 接口」中，脚本与权限均已保留 |
+| 上游 iStoreOS 更新后会不会把 LAN / 长按进 MaskROM 改坏 | 不会静默改坏：上游变更会自动触发重建，但网络生命线包在 defconfig 后和最终 manifest 各校验一次、DTS/u-boot overlay/网络映射逐字节比对、MaskROM 做源码/应用/产物三层断言，任一关键项漂移即 fail-fast 阻断构建，不会发布带病固件 |
 
 ---
 
@@ -213,6 +216,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **文本文件行尾固定为 LF（自检强制）**：`scripts/*.sh`、`configs/*.config`、`.github/workflows/*.yml` 与 `device/files/` 下的脚本必须全部以 LF 存储；`selftest.sh` 第 0.5 节在编译前逐文件扫描 CR 字符并阻断构建。历史上两类事故均由 CRLF 引起：`configs/g68-hybrid.config` 被写成 CRLF 时，行尾 `\r` 让 `grep -qx "CONFIG_PACKAGE_xxx=y"` 全项误报、`make defconfig` 静默丢符号；`scripts/dep-guard.sh` 被写成 CRLF 时，dash 把 `set -u\r` 解析为 `Illegal option`，build 作业在进入编译前直接退出。注意：通过 Git Data API 直接创建 blob 会绕过 git 客户端的行尾规范化，提交前务必核对远程 blob 的真实行尾。
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
+- **核心网络包双阶段守卫**：`scripts/verify-critical.sh` 在 `build` 作业里跑两次——`make defconfig` 之后查真实 `.config`（防上游 feed 漂移把 swconfig 四件套 / dnsmasq-full 静默丢弃，秒级失败而非编译 5 小时后才发现），收集产物时再查最终 `packages.manifest`（确保镜像里确实含包，缺任一则禁止发布 Release）。`selftest.sh` 另断言这两个调用点与脚本本身存在，防止守卫被误摘。
+- **服务菜单 Modem 项隐藏**：`device/files/usr/share/luci/menu.d/zz-hide-modem.json` 用 `menu.d` 后加载覆盖 + `depends.fs` 恒假机制隐藏 `admin/status/modemmanager` 节点（`zz-` 排序在 `luci-` 之后），只隐藏入口，不删包、不删拨号脚本 / ACL，4G/5G WWAN 功能保留。
 
 ### 10.3 构建流水线
 
@@ -232,7 +237,9 @@ uboot-check ──► feed-pin 固定提交 → 只编译 u-boot + 三层产物�
    ▼
 build ──► feed-pin 锁定滚动 feed → feed-sources 固定同名包来源
           → defconfig → 关闭 ext4 / 保留 squashfs → dep-guard 依赖版本守卫
+          → verify-critical(config) 核心网络包守卫（缺包秒级失败）
           → 全量编译 → 仅收集 squashfs 镜像 → 分区表校验
+          → verify-critical(manifest) 产物包守卫（缺包禁止发布）
           → artifact → Release → 回写 state 锁
 ```
 
@@ -241,7 +248,7 @@ build ──► feed-pin 锁定滚动 feed → feed-sources 固定同名包来�
 | `check-upstream` | 对比上游 commit 与 `state` 锁，决定是否构建 |
 | `prepare` | 应用设备层、静态自检、硬件审核、官方基准去重 |
 | `uboot-check` | `feed-pin` 固定提交后独立编译 u-boot，验证 MaskROM 链路 |
-| `build` | 固定 feed 提交与同名包来源、defconfig 归一化（关闭 ext4）、依赖版本守卫、全量编译、仅接受 squashfs 镜像并校验、发布 Release、回写 `upstream.lock` |
+| `build` | 固定 feed 提交与同名包来源、defconfig 归一化（关闭 ext4）、依赖版本守卫、核心网络包双阶段守卫、全量编译、仅接受 squashfs 镜像并校验、发布 Release、回写 `upstream.lock` |
 
 触发方式：`push`（配置变更）、`workflow_dispatch`（手动）、`schedule`（每周检查）、`upstream-watch`（上游变化自动触发）。
 
@@ -253,14 +260,16 @@ device/
   kernel-config          内核配置片段（SWCONFIG / RTL8366_SMI / RTL8367B_PHY）
   kernel-files/          内核驱动覆盖（支持 RTL8367S 的 rtl8367b 等，仅内核 6.6）
   board.d/               板级网络映射 02_network_g68（不改上游 02_network）
-  kernel-patches/        910/911/913/914 内核补丁
+  kernel-patches/        910/911/913/914/915 内核补丁（915=SGMII MAC select 修复 LAN 拿不到 IP）
   uboot/                 u-boot overlay（boot_mode、defconfig、板级 dts、版本守卫）
   i18n-overlay/          中文覆盖（条件投递）
+  files/                 落盘配置与 LuCI 菜单覆盖（含 zz-hide-modem.json 隐藏 Modem 入口）
   hw-exemptions.txt      硬件豁免清单（如 WiFi）
-scripts/                 apply / selftest / hw-audit / verify-maskrom / package-guard 等
+scripts/                 apply / selftest / hw-audit / verify-maskrom / verify-critical / package-guard 等
   feed-pin.sh            按 feeds.lock 固定滚动 feed 提交（防 main 漂移）
   feed-sources.sh        按 feed-precedence.txt 固定同名包的生效来源
   dep-guard.sh           defconfig 后全包依赖版本一致性守卫（fail-fast）
+  verify-critical.sh     核心网络包双阶段守卫（defconfig 后 + 最终 manifest）
 configs/
   g68-hybrid.config      完整包配置（含目标 / 设备 / 分区，显式关闭 ext4 rootfs）
   feeds.lock            滚动 feed 的已验证提交
@@ -278,6 +287,23 @@ configs/
 6. 全量包集（非裁剪版），WiFi 除外；
 7. 上游只认 iStoreOS，设备层以 overlay 交付。
 8. **文本文件行尾 = LF**：`configs/*.config`、`scripts/*.sh`、workflow 与 `device/files/` 下脚本必须全部以 LF 存储，由 `selftest.sh` 第 0.5 节逐文件扫描 CR 并阻断构建（CRLF 会让 `grep -qx` 自检、`make defconfig` 与 `/bin/sh` 的 `set` 指令失效）；
+9. **核心网络包双阶段守卫通过**：defconfig 展开后的 `.config` 与最终 `packages.manifest` 都必须含 swconfig 四件套 + dnsmasq-full；
+10. **服务菜单 Modem 入口保持隐藏**：`zz-hide-modem.json` 覆盖必须投递且 `depends.fs` 逻辑不被破坏（WWAN 拨号功能保留）。
+
+### 10.6 上游更新不变量如何被守住
+
+`upstream-watch` 每小时比对 iStoreOS `istoreos-24.10` 分支 commit，发现更新即自动触发全量重建。上游改动**不会静默覆盖**本机的网络与 MaskROM 能力，靠的是下面几层守卫；任一层失败即阻断构建、不放行带病 Release：
+
+| 不变量 | 投递方式（为何不被覆盖） | 守卫（何时拦截） |
+| --- | --- | --- |
+| **网络映射**（4 LAN + 1 WAN，port 6u→eth0 / 7u→eth1） | 独立 `board.d/02_network_g68`，按字母序排在上游 `02_network` **之后**加载；不改上游文件 | `selftest` §7 逐字节比对 + 语法 / 双上联断言；上游改 `02_network` 不影响本文件 |
+| **RTL8367S 驱动** | `device/kernel-files/generic/` 整文件 overlay 覆盖上游 `rtl8367b.c` 等 | `selftest` §6 逐字节比对 + `realtek,rtl8367s` 关键字；内核版本非 6.6 时 `apply-device.sh` 直接失败 |
+| **VLAN 落地**（用户态 `swconfig`） | config 明确选中 + package-guard `--allow swconfig` 豁免去重 | `selftest` §6 查 config 输入；`verify-critical.sh` 在 defconfig 后与 manifest 各查一次真实包集 |
+| **SGMII MAC select**（915 补丁，修 LAN 拿不到 IP） | `device/kernel-patches/915-*.patch` 随每次构建投递 | `selftest` §2 关键补丁 910/911/913/915 齐备；`hw-audit` H4 确认 sgmii-mac-sel 由补丁提供 |
+| **长按 Reset → MaskROM** | u-boot overlay-only（4 文件整文件覆盖 + 版本锁 `OVERLAY_BASE`），不用 patch | `verify-maskrom.sh` 三层断言：repo 内容 / 应用后源码树 / 编译产物二进制字符串 + `.config` 寄存器 |
+| **DNS 唯一性**（dnsmasq-full 替代 dnsmasq） | config 显式二选一 | `selftest` §10 + defconfig 检查 + `verify-critical.sh` 三处确认互斥 |
+
+> 换言之：上游更新只会带来"重新构建并复验"，任何会让 LAN/WAN 或长按进 MaskROM 失效的变化都会在中途 fail-fast，而不是产出一个刷入后拿不到 IP 的固件。若上游升级 u-boot 或内核大版本，`apply-device.sh` 的版本守卫会主动报错停下，提示基于新版本重新移植 overlay——绝不带病构建。
 
 ---
 
@@ -299,6 +325,7 @@ make defconfig
 # defconfig 会把 EXT4FS 拉回 y，必须二次压回（自动构建已内置此步）
 sed -i -E 's/^CONFIG_TARGET_ROOTFS_EXT4FS=y$/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
 sh ../scripts/dep-guard.sh . ../configs/feed-precedence.txt  # 依赖版本守卫
+sh ../scripts/verify-critical.sh config .config              # 核心网络包守卫（defconfig 后）
 make -j"$(nproc)"
 ```
 
