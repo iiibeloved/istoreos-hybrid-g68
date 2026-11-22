@@ -1,0 +1,31 @@
+#!/bin/sh
+# G68 服务菜单隐藏顶级 Modem（蜂窝网络）入口。
+#
+# 背景：带"短信"子项的顶级 Modem 来自 luci-app-sms-tool 的 controller：
+#   /usr/lib/lua/luci/controller/modem/sms.lua
+#     entry({"admin", "modem"}, firstchild(), "Modem", 30).dependent=false
+# zz-hide-modem.json 原先只覆盖 admin/status/modemmanager（Cellular Network），
+# 节点不同，顶级 Modem 依旧显示。
+#
+# 为什么还要改 controller：LuCI build_pagetree 按 glob 顺序加载，
+#   menu.d/*.json 先于 controller/*.lua 处理，且每个文件都会
+#   node.satisfied = check_depends(spec) 覆盖前值；sms.lua 的顶级 entry
+#   无 depends，会把 menu.d 的恒假覆盖重算为 true。
+#   真机实测：只写 menu.d → satisfied=true（仍显示）；
+#   注释该 entry + menu.d 恒假覆盖 → satisfied=false（隐藏成功）。
+#
+# 只注释这一行注册；短信/拨号脚本、ACL、WWAN 功能全部保留，
+# 需要蜂窝网络时仍可从「网络 → 接口」配置。
+
+SMS="/usr/lib/lua/luci/controller/modem/sms.lua"
+[ -f "$SMS" ] || exit 0
+
+# 幂等：已处理过则直接返回
+grep -q 'G68-HIDDEN.*entry({"admin", "modem"}' "$SMS" && exit 0
+
+# 真机验证过的写法：把该行变成 Lua 注释
+sed -i 's|^[[:space:]]*entry({"admin", "modem"}, firstchild()|-- G68-HIDDEN (WWAN kept) entry({"admin", "modem"}, firstchild()|' "$SMS"
+
+# 清掉旧 menu 缓存，让下次访问重建（不删则隐藏不即时生效）
+rm -f /tmp/luci-indexcache*.json 2>/dev/null || true
+exit 0

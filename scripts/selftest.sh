@@ -256,6 +256,31 @@ grep -q 'GOTOOLCHAIN=local/GOTOOLCHAIN=auto' "$HERE/.github/workflows/build.yml"
 	&& ok "build.yml 已把 GOTOOLCHAIN 改为 auto" \
 	|| bad "build.yml 未放宽 GOTOOLCHAIN（xray/sing-box/ddns-go 会编译失败）"
 
+echo "== 13. 服务菜单：隐藏顶级 Modem + Samba4 标签 =="
+# 顶级 Modem 来自 luci-app-sms-tool 的 controller entry({"admin","modem"},...)，
+# 与 zz-hide-modem.json 原覆盖的 admin/status/modemmanager 不是同一节点。
+# 真机实测：仅 menu.d 覆盖会被 controller 重算为 satisfied=true（仍显示）；
+# 必须「注释 sms.lua 顶级 entry + menu.d 恒假覆盖 admin/modem」两者配合。
+HIDE_JSON="$DEV/files/usr/share/luci/menu.d/zz-hide-modem.json"
+HIDE_ENTRY="$DEV/files/etc/uci-defaults/91-g68-hide-modem-entry"
+SAMBA_JSON="$DEV/files/usr/share/luci/menu.d/zz-samba4-label.json"
+[ -f "$HIDE_JSON" ] && ok "zz-hide-modem.json 存在" || bad "缺 zz-hide-modem.json"
+grep -q 'admin/status/modemmanager' "$HIDE_JSON" 2>/dev/null \
+	&& ok "覆盖 Cellular Network 节点" || bad "zz-hide-modem.json 缺 admin/status/modemmanager"
+grep -q 'admin/modem' "$HIDE_JSON" 2>/dev/null \
+	&& ok "覆盖顶级 Modem 节点 admin/modem" || bad "zz-hide-modem.json 缺 admin/modem（顶级 Modem 会显示）"
+[ -f "$HIDE_ENTRY" ] && ok "91-g68-hide-modem-entry 存在" || bad "缺 91-g68-hide-modem-entry（controller 会重算覆盖）"
+grep -q 'entry({"admin", "modem"}, firstchild()' "$HIDE_ENTRY" 2>/dev/null \
+	&& ok "脚本含 sms.lua 顶级 entry 注释规则" || bad "隐藏脚本缺 sms.lua entry 处理"
+grep -q 'G68-HIDDEN' "$HIDE_ENTRY" 2>/dev/null \
+	&& ok "隐藏脚本用 G68-HIDDEN 标记（幂等）" || bad "隐藏脚本缺 G68-HIDDEN 幂等标记"
+# Samba4 标签：两个"网络共享"要可区分，只改 samba4（ksmbd 保持原名）
+[ -f "$SAMBA_JSON" ] && ok "zz-samba4-label.json 存在" || bad "缺 zz-samba4-label.json"
+grep -q 'admin/services/samba4' "$SAMBA_JSON" 2>/dev/null \
+	&& ok "覆盖 Samba4 菜单节点" || bad "zz-samba4-label.json 缺 admin/services/samba4"
+grep -q '网络共享++' "$SAMBA_JSON" 2>/dev/null \
+	&& ok "Samba4 标签=网络共享++（与 ksmbd 区分）" || bad "Samba4 标签未设为网络共享++"
+
 if [ "$FAIL" -gt 0 ]; then
 	echo "自检失败：$FAIL 项"
 	exit 1

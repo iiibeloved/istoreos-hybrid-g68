@@ -148,7 +148,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 6. **验证 MaskROM 能力（可选）。** 下次需要刷机时，用第五节的长按 Reset 流程验证一次即可；平时不必反复进 MaskROM。
 7. **完成配置后备份。** 系统 → 备份/升级 → 生成配置备份并妥善保存，便于日后恢复。
 8. **SMB 服务默认已配好，开箱即用。** 固件内置 `samba4-server` 与 `ksmbd-server` 两套 SMB 服务端，二者都监听 TCP **445** 端口，同时自启会争用端口。已通过首次启动脚本默认**启用 samba4、禁用 ksmbd 自启**，无需手动干预即可使用 SMB 共享。若确需改用 ksmbd：在「系统 → 启动项」中禁用 `samba4`、启用 `ksmbd` 并重启即可，SMB 文件共享功能本身不受影响。
-9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能；服务菜单中 `wol` 显示为“网络唤醒”、`wolplus` 显示为“网络唤醒++”，便于区分。服务菜单中的 **Modem**（蜂窝网络）入口已隐藏——它来自 `luci-proto-modemmanager` 自带的 LuCI 菜单节点，本固件通过 `menu.d` 覆盖文件隐藏该入口，但 **4G/5G WWAN 拨号能力、脚本与 ACL 完整保留**，需要蜂窝网络时功能不受影响。
+9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能；服务菜单中 `wol` 显示为“网络唤醒”、`wolplus` 显示为“网络唤醒++”，便于区分。服务菜单中的 **Modem**（蜂窝网络）入口已隐藏——顶级 Modem（带“短信”子项）来自 `luci-app-sms-tool` 的 controller，状态页的 Cellular Network 来自 `luci-proto-modemmanager`，本固件通过 `menu.d` 覆盖 + 首次启动脚本注释 controller 注册行双管齐下隐藏这两个入口，但 **4G/5G WWAN 拨号能力、短信脚本与 ACL 完整保留**，需要蜂窝网络时功能不受影响。服务菜单中两个“网络共享”已区分：`samba4` 显示为“网络共享++”，`ksmbd` 保持“网络共享”。
 10. **常见误区**：
    - 只接了 LAN 口、没接 WAN → 能进管理页但上不了外网，属正常，接好 WAN 即可。
    - 上级路由 LAN 口与本机 LAN 同为 `192.168.100.x` → 地址冲突，先在向导里把本机 LAN 改到其它网段。
@@ -195,7 +195,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 | RKDevTool 找不到 MaskROM 设备 | 检查驱动、USB 线（须为数据线）与 OTG 口；长按 Reset 时序或改用短接触点法 |
 | 刷机中途报错 / 校验失败 | 重新“擦除所有”后勾选“强制按地址写”再刷；核对 sha256 |
 | 商城 / quickstart 无中文 | 确认对应应用已安装后重启（中文为条件投递） |
-| 服务菜单里找不到 Modem / Cellular Network | 这是刻意隐藏的（`menu.d` 覆盖），不影响 4G/5G 拨号；WWAN 配置仍在「网络 → 接口」中，脚本与权限均已保留 |
+| 服务菜单里找不到 Modem / Cellular Network | 这是刻意隐藏的（`menu.d` 覆盖 + 首次启动注释 controller entry），不影响 4G/5G 拨号与短信；WWAN 配置仍在「网络 → 接口」中，脚本与权限均已保留 |
+| 服务里两个“网络共享”分别是什么 | “网络共享++”是 samba4，“网络共享”是 ksmbd；默认启用 samba4、关闭 ksmbd 自启，二者共用 445 端口不可同时自启 |
 | 上游 iStoreOS 更新后会不会把 LAN / 长按进 MaskROM 改坏 | 不会静默改坏：上游变更会自动触发重建，但网络生命线包在 defconfig 后和最终 manifest 各校验一次、DTS/u-boot overlay/网络映射逐字节比对、MaskROM 做源码/应用/产物三层断言，任一关键项漂移即 fail-fast 阻断构建，不会发布带病固件 |
 
 ---
@@ -218,7 +219,8 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
 - **核心网络包双阶段守卫**：`scripts/verify-critical.sh` 在 `build` 作业里跑两次——`make defconfig` 之后查真实 `.config`（防上游 feed 漂移把 swconfig 四件套 / dnsmasq-full 静默丢弃，秒级失败而非编译 5 小时后才发现），收集产物时再查最终 `packages.manifest`（确保镜像里确实含包，缺任一则禁止发布 Release）。`selftest.sh` 另断言这两个调用点与脚本本身存在，防止守卫被误摘。
 - **网络链路应用后守卫（补丁生效验证）**：`scripts/verify-network.sh` 解决"包齐全但网络死"的盲区。上游每次增量提交都可能改动 `dwmac-rk.c` / rk3568 dts 的上下文，使内核补丁 hunk 静默 FAILED——历史事故 `c6d9bc6` 即 915 补丁 hunk 失败后编译仍"成功"、刷入后 LAN 拿不到 IP。`verify-network.sh source` 在编译后检查打过补丁的内核源码确实含 910（SGMII 支持）、913（fixed-link 强制速率）、915（`pipe_grf` 成员 + `PIPE_GRF_XPCS_SGMII_MAC_SEL` 编程 + `pipegrf` phandle 读取）与 RTL8367S 驱动 overlay；`verify-network.sh dts` 在 prepare 与产物两阶段检查板级 DTS 的 `sgmii-mac-sel`/`pipegrf`/`phy-mode=sgmii`/RTL8367S switch/xpcs 节点。任一锚点缺失即禁止发布。`selftest.sh` 断言脚本存在且 build.yml 挂载点齐全，防被误摘。
-- **服务菜单 Modem 项隐藏**：`device/files/usr/share/luci/menu.d/zz-hide-modem.json` 用 `menu.d` 后加载覆盖 + `depends.fs` 恒假机制隐藏 `admin/status/modemmanager` 节点（`zz-` 排序在 `luci-` 之后），只隐藏入口，不删包、不删拨号脚本 / ACL，4G/5G WWAN 功能保留。
+- **服务菜单 Modem 项隐藏**：两个入口来自不同节点——顶级 Modem（带“短信”子项）是 `luci-app-sms-tool` controller 的 `entry({"admin","modem"}, ...)`，状态页 Cellular Network 是 `luci-proto-modemmanager` 的 `admin/status/modemmanager`。`zz-hide-modem.json` 用 `menu.d` 后加载覆盖 + `depends.fs` 恒假同时隐藏这两个节点（`zz-` 排序在 `luci-` 之后）；但 LuCI `build_pagetree` 按 glob 顺序在 menu.d 之后处理 controller/*.lua，且每个文件都会重算 `node.satisfied`，sms.lua 的顶级 entry 无 depends 会把覆盖重算为 true。因此首次启动脚本 `91-g68-hide-modem-entry` 幂等地把该 entry 注释为 Lua 注释，两者配合才真正隐藏（真机 indexcache 实测 `satisfied=false`）。只隐藏入口，不删包、不删短信/拨号脚本与 ACL，4G/5G WWAN 功能保留。
+- **Samba4 标签区分**：`zz-samba4-label.json` 把 `admin/services/samba4` 的 title 覆盖为“网络共享++”，与 `ksmbd` 的“网络共享”区分（两个 SMB 服务都装、共用 445，默认启用 samba4）。
 
 ### 10.3 构建流水线
 
@@ -264,7 +266,7 @@ device/
   kernel-patches/        910/911/913/914/915 内核补丁（915=SGMII MAC select 修复 LAN 拿不到 IP）
   uboot/                 u-boot overlay（boot_mode、defconfig、板级 dts、版本守卫）
   i18n-overlay/          中文覆盖（条件投递）
-  files/                 落盘配置与 LuCI 菜单覆盖（含 zz-hide-modem.json 隐藏 Modem 入口）
+  files/                 落盘配置与 LuCI 菜单覆盖（zz-hide-modem.json + 91-g68-hide-modem-entry 隐藏 Modem，zz-samba4-label.json 区分网络共享）
   hw-exemptions.txt      硬件豁免清单（如 WiFi）
 scripts/                 apply / selftest / hw-audit / verify-maskrom / verify-critical / package-guard 等
   feed-pin.sh            按 feeds.lock 固定滚动 feed 提交（防 main 漂移）
@@ -290,7 +292,7 @@ configs/
 7. 上游只认 iStoreOS，设备层以 overlay 交付。
 8. **文本文件行尾 = LF**：`configs/*.config`、`scripts/*.sh`、workflow 与 `device/files/` 下脚本必须全部以 LF 存储，由 `selftest.sh` 第 0.5 节逐文件扫描 CR 并阻断构建（CRLF 会让 `grep -qx` 自检、`make defconfig` 与 `/bin/sh` 的 `set` 指令失效）；
 9. **核心网络包双阶段守卫通过**：defconfig 展开后的 `.config` 与最终 `packages.manifest` 都必须含 swconfig 四件套 + dnsmasq-full；
-10. **服务菜单 Modem 入口保持隐藏**：`zz-hide-modem.json` 覆盖必须投递且 `depends.fs` 逻辑不被破坏（WWAN 拨号功能保留）。
+10. **服务菜单 Modem 入口保持隐藏**：`zz-hide-modem.json` 覆盖（含 `admin/modem` 顶级节点）与首次启动脚本 `91-g68-hide-modem-entry` 都必须投递且内容不被破坏，二者缺一则顶级 Modem 会重新显示（WWAN 拨号功能保留）；`zz-samba4-label.json` 保证 Samba4 标签为“网络共享++”。
 11. **内核补丁必须真实生效**：编译后打过补丁的 `dwmac-rk.c` 必须含 910/913/915 的应用后代码，板级 DTS 必须含 `pipegrf`/`sgmii-mac-sel`。包齐全 ≠ 网络可用（历史事故：补丁 hunk 静默失败导致刷入后 LAN 全瘫）。
 
 ### 10.6 上游更新不变量如何被守住
