@@ -48,7 +48,7 @@
 - **5 口全千兆，开箱就能上网。** RTL8367S 交换芯片由 `swconfig` 驱动正确初始化，划分为 **4 个 LAN 口 + 1 个 WAN 口**；LAN 口 DHCP、WAN 口 DHCP 客户端默认可用，插上网线即可获取地址。
 - **完整 iStoreOS 生态。** 商店、初始化向导、Docker、SMB 共享（`samba4` / `ksmbd`）、WebDAV（`unishare` / `webdav2`）、NFS、文件管理 / 传输、定时控制、上网行为管理等应用全部内置，不是精简固件。
 - **稳定可升级、可重复构建。** 每次构建以 iStoreOS 官方包清单为基准去重：同名 / 同文件的第三方包一律让位；滚动 feed 锁定到已验证提交、同名包生效来源统一指定、编译前做全包依赖版本校验，防止上游静默漂移导致“这次能编、下次编不过”。
-- **核心功能有“双阶段 fail-fast”守卫。** 上游更新自动重建，但网络生命线包（swconfig 四件套 + dnsmasq-full）、蜂窝能力移除（28 个蜂窝包不得出现，SMSC 网络驱动不得误禁）与长按进 MaskROM 链路在 **defconfig 展开后** 和 **最终镜像 manifest** 各校验一次，缺一 / 带回蜂窝即停止构建 / 禁止发布；DTS、u-boot overlay、板级网络映射全部以整文件 overlay 投递并逐字节比对，上游改同名文件也盖不掉本机的网络与按键行为（详见[10.6 上游更新不变量](#106-上游更新不变量如何被守住)）。
+- **核心功能有“双阶段 fail-fast”守卫。** 上游更新自动重建，但网络生命线包（swconfig 四件套 + dnsmasq-full）、蜂窝能力移除（32 个蜂窝包不得出现，SMSC 网络驱动不得误禁）与长按进 MaskROM 链路在 **defconfig 展开后** 和 **最终镜像 manifest** 各校验一次，缺一 / 带回蜂窝即停止构建 / 禁止发布；DTS、u-boot overlay、板级网络映射全部以整文件 overlay 投递并逐字节比对，上游改同名文件也盖不掉本机的网络与按键行为（详见[10.6 上游更新不变量](#106-上游更新不变量如何被守住)）。
 - **中文界面到位，不留孤儿菜单。** 仅当对应应用确实安装时才覆盖其中文界面，不会出现“装了中文包但菜单不存在”的空项。
 - **完整生态含 Go 应用。** DDNS-Go、Lucky 等要求较新 Go 版本的应用已随固件编译提供；构建侧通过 `GOTOOLCHAIN=auto` 与单线程重试兜底消除工具链竞态（见「技术实现」）。
 - **多重自动化守卫。** 每次构建前做静态自检、硬件级交叉审核（DTS ↔ 内核配置 ↔ 包集），并对 u-boot 做源码 / 应用后 / 编译产物三层断言，防止 MaskROM 与网络能力被上游改动悄悄破坏。
@@ -148,7 +148,7 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 6. **验证 MaskROM 能力（可选）。** 下次需要刷机时，用第五节的长按 Reset 流程验证一次即可；平时不必反复进 MaskROM。
 7. **完成配置后备份。** 系统 → 备份/升级 → 生成配置备份并妥善保存，便于日后恢复。
 8. **SMB 服务默认已配好，开箱即用。** 固件内置 `samba4-server` 与 `ksmbd-server` 两套 SMB 服务端，二者都监听 TCP **445** 端口，同时自启会争用端口。已通过首次启动脚本默认**启用 samba4、禁用 ksmbd 自启**，无需手动干预即可使用 SMB 共享。若确需改用 ksmbd：在「系统 → 启动项」中禁用 `samba4`、启用 `ksmbd` 并重启即可，SMB 文件共享功能本身不受影响。
-9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能；服务菜单中 `wol` 显示为“网络唤醒”、`wolplus` 显示为“网络唤醒++”，便于区分。**蜂窝能力已整体移除**：`configs/g68-hybrid.config` 显式关闭全部 28 个蜂窝 / 短信 / 拨号包（`luci-app-sms-tool`、`luci-app-modem`、`modemmanager`、`luci-proto-*`、`libqmi`/`libmbim`、`uqmi`/`umbim`、`wwan`、`quectel-CM-5G` 等），固件不含任何 4G/5G/短信功能；`menu.d` 覆盖 + 首次启动脚本注释 controller 作为纵深兜底，防止上游意外带回时 Modem 菜单露出。**注意**：`kmod-phy-smsc` / `kmod-usb-net-smsc95xx` 是 SMSC 以太网 PHY 驱动（名字含 sms 但与蜂窝无关），予以保留并由守卫反向锁定。服务菜单中两个“网络共享”已区分：`samba4` 显示为“网络共享++”，`ksmbd` 保持“网络共享”。
+9. **菜单说明**：首页（QuickStart）固定为左侧第一项，网络向导（NetworkGuide）紧随其后；独立的“设置向导”（`luci-app-netwizard`）与多余的“管理面板”（Dashboard）已移除，不影响网络向导配网功能；服务菜单中 `wol` 显示为“网络唤醒”、`wolplus` 显示为“网络唤醒++”，便于区分。**蜂窝能力已整体移除**：`configs/g68-hybrid.config` 显式关闭全部 32 个蜂窝 / 短信 / 拨号包（`luci-app-sms-tool`、`luci-app-modem`、`modemmanager`、`luci-proto-*`、`libqmi`/`libmbim`、`uqmi`/`umbim`、`wwan`、`quectel-CM-5G` 等），固件不含任何 4G/5G/短信功能；`menu.d` 覆盖 + 首次启动脚本注释 controller 作为纵深兜底，防止上游意外带回时 Modem 菜单露出。**注意**：`kmod-phy-smsc` / `kmod-usb-net-smsc95xx` 是 SMSC 以太网 PHY 驱动（名字含 sms 但与蜂窝无关），予以保留并由守卫反向锁定。服务菜单中两个“网络共享”已区分：`samba4` 显示为“网络共享++”，`ksmbd` 保持“网络共享”。
 10. **常见误区**：
    - 只接了 LAN 口、没接 WAN → 能进管理页但上不了外网，属正常，接好 WAN 即可。
    - 上级路由 LAN 口与本机 LAN 同为 `192.168.100.x` → 地址冲突，先在向导里把本机 LAN 改到其它网段。
@@ -217,9 +217,9 @@ LuCI → 系统 → 备份/升级 → 上传 .img.gz → 勾选「保留配置�
 - **文本文件行尾固定为 LF（自检强制）**：`scripts/*.sh`、`configs/*.config`、`.github/workflows/*.yml` 与 `device/files/` 下的脚本必须全部以 LF 存储；`selftest.sh` 第 0.5 节在编译前逐文件扫描 CR 字符并阻断构建。历史上两类事故均由 CRLF 引起：`configs/g68-hybrid.config` 被写成 CRLF 时，行尾 `\r` 让 `grep -qx "CONFIG_PACKAGE_xxx=y"` 全项误报、`make defconfig` 静默丢符号；`scripts/dep-guard.sh` 被写成 CRLF 时，dash 把 `set -u\r` 解析为 `Illegal option`，build 作业在进入编译前直接退出。注意：通过 Git Data API 直接创建 blob 会绕过 git 客户端的行尾规范化，提交前务必核对远程 blob 的真实行尾。
 - **中文条件投递**：`g68-i18n` 仅在检测到对应应用已安装时覆盖界面文件。
 - **CI 硬件审核**：`hw-audit` 交叉核对 DTS ↔ 内核配置 ↔ 包集（RTL8367S / XPCS / adc-keys / 存储 / WiFi 豁免），缺关键项阻断构建。
-- **核心网络包 + 蜂窝移除双阶段守卫**：`scripts/verify-critical.sh` 在 `build` 作业里跑两次——`make defconfig` 之后查真实 `.config`，收集产物时再查最终 `packages.manifest`。两个阶段都做两类断言：① 网络生命线（swconfig 四件套 + dnsmasq-full）必须齐全，缺一秒级失败 / 禁止发布；② 28 个蜂窝包必须全部未选中 / 未进产物，任一被上游 feed 漂移或去重重新带入即失败，同时反向锁定 SMSC 以太网 PHY 驱动不被误禁。`selftest.sh` §14 复用同一守卫在 config 输入阶段先查一次（清单只维护一份，避免漂移），并断言调用点与脚本本身存在，防止守卫被误摘。
+- **核心网络包 + 蜂窝移除双阶段守卫**：`scripts/verify-critical.sh` 在 `build` 作业里跑两次——`make defconfig` 之后查真实 `.config`，收集产物时再查最终 `packages.manifest`。两个阶段都做两类断言：① 网络生命线（swconfig 四件套 + dnsmasq-full）必须齐全，缺一秒级失败 / 禁止发布；② 32 个蜂窝包必须全部未选中 / 未进产物，任一被上游 feed 漂移或去重重新带入即失败，同时反向锁定 SMSC 以太网 PHY 驱动不被误禁。`selftest.sh` §14 复用同一守卫在 config 输入阶段先查一次（清单只维护一份，避免漂移），并断言调用点与脚本本身存在，防止守卫被误摘。
 - **网络链路应用后守卫（补丁生效验证）**：`scripts/verify-network.sh` 解决"包齐全但网络死"的盲区。上游每次增量提交都可能改动 `dwmac-rk.c` / rk3568 dts 的上下文，使内核补丁 hunk 静默 FAILED——历史事故 `c6d9bc6` 即 915 补丁 hunk 失败后编译仍"成功"、刷入后 LAN 拿不到 IP。`verify-network.sh source` 在编译后检查打过补丁的内核源码确实含 910（SGMII 支持）、913（fixed-link 强制速率）、915（`pipe_grf` 成员 + `PIPE_GRF_XPCS_SGMII_MAC_SEL` 编程 + `pipegrf` phandle 读取）与 RTL8367S 驱动 overlay；`verify-network.sh dts` 在 prepare 与产物两阶段检查板级 DTS 的 `sgmii-mac-sel`/`pipegrf`/`phy-mode=sgmii`/RTL8367S switch/xpcs 节点。任一锚点缺失即禁止发布。`selftest.sh` 断言脚本存在且 build.yml 挂载点齐全，防被误摘。
-- **蜂窝能力整体移除 + Modem 菜单纵深兜底**：主动防线在编译期——`configs/g68-hybrid.config` 用 `# CONFIG_PACKAGE_x is not set` 显式关闭 28 个蜂窝包，由 `verify-critical.sh` 两阶段守卫锁定（见上）。菜单层是纵深兜底：顶级 Modem（带“短信”子项）原是 `luci-app-sms-tool` controller 的 `entry({"admin","modem"}, ...)`，状态页 Cellular Network 原是 `luci-proto-modemmanager` 的 `admin/status/modemmanager`；`zz-hide-modem.json` 用 `menu.d` 后加载覆盖 + `depends.fs` 恒假隐藏这两个节点（`zz-` 排序在 `luci-` 之后）。但 LuCI `build_pagetree` 按 glob 顺序在 menu.d 之后处理 controller/*.lua，且每个文件都会重算 `node.satisfied`，sms.lua 的顶级 entry 无 depends 会把覆盖重算为 true；因此首次启动脚本 `91-g68-hide-modem-entry` 幂等地把该 entry 注释为 Lua 注释，两者配合才真正隐藏（真机 indexcache 实测 `satisfied=false`）。正常固件里这些 controller 随蜂窝包一起不存在，兜底只在上游意外带回时生效。**反向依赖坑（2026-11-23）**：上游 `comgt-ncm` 的 `DEPENDS:=+wwan`、`kmod-usb-serial-option/ipw/qualcomm` 的 `AddDepends(...,+kmod-usb-serial-wwan)` 会在 `make defconfig` 时把已禁用的 `wwan` / `kmod-usb-serial-wwan` 强制 select 回 `=y`，所以这 6 个源包也必须显式关闭并纳入清单；仅禁用末端包会导致守卫在 defconfig 阶段 fail-fast（r2 之后的构建曾因此中止）。
+- **蜂窝能力整体移除 + Modem 菜单纵深兜底**：主动防线在编译期——`configs/g68-hybrid.config` 用 `# CONFIG_PACKAGE_x is not set` 显式关闭 32 个蜂窝包，由 `verify-critical.sh` 两阶段守卫锁定（见上）。菜单层是纵深兜底：顶级 Modem（带“短信”子项）原是 `luci-app-sms-tool` controller 的 `entry({"admin","modem"}, ...)`，状态页 Cellular Network 原是 `luci-proto-modemmanager` 的 `admin/status/modemmanager`；`zz-hide-modem.json` 用 `menu.d` 后加载覆盖 + `depends.fs` 恒假隐藏这两个节点（`zz-` 排序在 `luci-` 之后）。但 LuCI `build_pagetree` 按 glob 顺序在 menu.d 之后处理 controller/*.lua，且每个文件都会重算 `node.satisfied`，sms.lua 的顶级 entry 无 depends 会把覆盖重算为 true；因此首次启动脚本 `91-g68-hide-modem-entry` 幂等地把该 entry 注释为 Lua 注释，两者配合才真正隐藏（真机 indexcache 实测 `satisfied=false`）。正常固件里这些 controller 随蜂窝包一起不存在，兜底只在上游意外带回时生效。**反向依赖坑（2026-11-23）**：上游 `comgt-ncm` 的 `DEPENDS:=+wwan`、`kmod-usb-serial-option/ipw/qualcomm` 的 `AddDepends(...,+kmod-usb-serial-wwan)`、`luci-proto-ncm` 的 `LUCI_DEPENDS:=+comgt-ncm`、`quectel-timesync` 的 `DEPENDS:=+kmod-usb-serial-option` 会在 `make defconfig` 时把已禁用的末端蜂窝包强制 select 回 `=y`。因此这 10 个源包也必须显式关闭并纳入清单（对全部 feed 的 Makefile 做过反向依赖全量扫描）；仅禁用末端包会导致守卫在 defconfig 阶段 fail-fast（r2 之后的构建曾两次因此中止）。
 - **Samba4 标签区分**：`zz-samba4-label.json` 把 `admin/services/samba4` 的 title 覆盖为“网络共享++”，与 `ksmbd` 的“网络共享”区分（两个 SMB 服务都装、共用 445，默认启用 samba4）。
 
 ### 10.3 构建流水线
@@ -292,7 +292,7 @@ configs/
 7. 上游只认 iStoreOS，设备层以 overlay 交付。
 8. **文本文件行尾 = LF**：`configs/*.config`、`scripts/*.sh`、workflow 与 `device/files/` 下脚本必须全部以 LF 存储，由 `selftest.sh` 第 0.5 节逐文件扫描 CR 并阻断构建（CRLF 会让 `grep -qx` 自检、`make defconfig` 与 `/bin/sh` 的 `set` 指令失效）；
 9. **核心网络包双阶段守卫通过**：defconfig 展开后的 `.config` 与最终 `packages.manifest` 都必须含 swconfig 四件套 + dnsmasq-full；
-10. **蜂窝能力保持整体移除 + Modem 菜单隐藏**：config 中 28 个蜂窝包必须全部为 `is not set`（`verify-critical.sh` 两阶段守卫拦截重新引入），SMSC 以太网 PHY 驱动必须保留；`zz-hide-modem.json`（含 `admin/modem` 顶级节点）与 `91-g68-hide-modem-entry` 作为兜底必须投递且内容不被破坏；`zz-samba4-label.json` 保证 Samba4 标签为“网络共享++”。
+10. **蜂窝能力保持整体移除 + Modem 菜单隐藏**：config 中 32 个蜂窝包必须全部为 `is not set`（`verify-critical.sh` 两阶段守卫拦截重新引入），SMSC 以太网 PHY 驱动必须保留；`zz-hide-modem.json`（含 `admin/modem` 顶级节点）与 `91-g68-hide-modem-entry` 作为兜底必须投递且内容不被破坏；`zz-samba4-label.json` 保证 Samba4 标签为“网络共享++”。
 11. **内核补丁必须真实生效**：编译后打过补丁的 `dwmac-rk.c` 必须含 910/913/915 的应用后代码，板级 DTS 必须含 `pipegrf`/`sgmii-mac-sel`。包齐全 ≠ 网络可用（历史事故：补丁 hunk 静默失败导致刷入后 LAN 全瘫）。
 
 ### 10.6 上游更新不变量如何被守住
@@ -307,7 +307,7 @@ configs/
 | **SGMII MAC select**（915 补丁，修 LAN 拿不到 IP） | `device/kernel-patches/915-*.patch` 随每次构建投递 | `selftest` §2 补丁投递齐备 + §1 DTS 锚点；`verify-network.sh source` 编译后确认 `dwmac-rk.c` 真含 `pipe_grf` + `PIPE_GRF_XPCS_SGMII_MAC_SEL` + `pipegrf` 读取（hunk 静默失败即刻阻断，历史事故 c6d9bc6 不再重演）；`dts` 模式确认 `sgmii-mac-sel`/`pipegrf` phandle |
 | **长按 Reset → MaskROM** | u-boot overlay-only（4 文件整文件覆盖 + 版本锁 `OVERLAY_BASE`），不用 patch | `verify-maskrom.sh` 三层断言：repo 内容 / 应用后源码树 / 编译产物二进制字符串 + `.config` 寄存器 |
 | **DNS 唯一性**（dnsmasq-full 替代 dnsmasq） | config 显式二选一 | `selftest` §10 + defconfig 检查 + `verify-critical.sh` 三处确认互斥 |
-| **蜂窝能力整体移除**（用户决策，不含 4G/5G/短信） | config 显式关闭 28 个蜂窝包（`is not set`） | `selftest` §14 + `verify-critical.sh` 在 defconfig 后与 manifest 各查一次：任一蜂窝包重新出现即失败，同时反向锁定 SMSC 以太网 PHY 驱动不被误禁 |
+| **蜂窝能力整体移除**（用户决策，不含 4G/5G/短信） | config 显式关闭 32 个蜂窝包（`is not set`） | `selftest` §14 + `verify-critical.sh` 在 defconfig 后与 manifest 各查一次：任一蜂窝包重新出现即失败，同时反向锁定 SMSC 以太网 PHY 驱动不被误禁 |
 
 > 换言之：上游更新只会带来"重新构建并复验"，任何会让 LAN/WAN 或长按进 MaskROM 失效、或把蜂窝能力带回的变化都会在中途 fail-fast，而不是产出一个刷入后拿不到 IP 或带多余蜂窝应用的固件。若上游升级 u-boot 或内核大版本，`apply-device.sh` 的版本守卫会主动报错停下，提示基于新版本重新移植 overlay——绝不带病构建。
 

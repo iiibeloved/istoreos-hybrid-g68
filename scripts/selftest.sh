@@ -285,7 +285,7 @@ grep -q '网络共享++' "$SAMBA_JSON" 2>/dev/null \
 	&& ok "Samba4 标签=网络共享++（与 ksmbd 区分）" || bad "Samba4 标签未设为网络共享++"
 
 echo "== 14. 编译期蜂窝能力整体移除（主动防线，fail-fast）=="
-# 复用 verify-critical 的 config 守卫：既查网络生命线齐全，又查 28 个蜂窝包
+# 复用 verify-critical 的 config 守卫：既查网络生命线齐全，又查 32 个蜂窝包
 # 全部为 'is not set'、且 SMSC 以太网 PHY 驱动仍保留。清单只在 verify-critical
 # 维护一份，避免两处漂移。上游/去重把任一蜂窝包带回即在此失败。
 sh "$HERE/scripts/verify-critical.sh" config "$CFG" || FAIL=$((FAIL+1))

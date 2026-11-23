@@ -30,11 +30,12 @@ CRIT="swconfig kmod-swconfig kmod-switch-rtl8366-smi kmod-switch-rtl8367b dnsmas
 # 蜂窝能力整体移除（用户决策 2026-11-22）：固件不含任何 4G/5G/短信应用，
 # 但保留 kmod-phy-smsc / kmod-usb-net-smsc95xx（SMSC 以太网 PHY 驱动，名字含 sms 但与蜂窝无关）。
 # 上游 feed 漂移或 package-guard 去重可能把这些包重新带入，必须在两阶段拦截。
-# 2026-11-23 补 6 个"反向依赖源"：comgt-ncm 上游 DEPENDS:=+wwan，
+# 2026-11-23 补 10 个"反向依赖源"：comgt-ncm 上游 DEPENDS:=+wwan，
 # kmod-usb-serial-option/ipw/qualcomm 上游 AddDepends(...,+kmod-usb-serial-wwan)，
-# make defconfig 会把已禁用的 wwan / kmod-usb-serial-wwan 强制拉回 y。
-# 只禁用末端包无效，必须连同这些源包一起关闭并纳入清单。
-CELLULAR="adb-enablemodem comgt comgt-directip comgt-ncm kmod-qmi_wwan_m kmod-qmi_wwan_q kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan kmod-usb-serial-ipw kmod-usb-serial-option kmod-usb-serial-qualcomm kmod-usb-serial-wwan libmbim libqmi libqrtr-glib luci-app-modem luci-app-sms-tool luci-i18n-modem-zh-cn luci-proto-3g luci-proto-modemmanager luci-proto-qmi modemmanager qmi-utils quectel-CM-5G sms-tool umbim uqmi wwan"
+# luci-proto-ncm 上游 LUCI_DEPENDS:=+comgt-ncm，quectel-timesync 依赖 +kmod-usb-serial-option，
+# make defconfig 会把已禁用的末端蜂窝包强制 select 回 y。只禁用末端包无效，
+# 必须连同这些源包一起关闭并纳入清单。已对全部 feed 做反向依赖全量扫描。
+CELLULAR="adb-enablemodem comgt comgt-directip comgt-ncm kmod-qmi_wwan_m kmod-qmi_wwan_q kmod-usb-net-cdc-mbim kmod-usb-net-qmi-wwan kmod-usb-serial-ipw kmod-usb-serial-option kmod-usb-serial-qualcomm kmod-usb-serial-wwan libmbim libqmi libqrtr-glib luci-app-3ginfo-lite luci-app-modem luci-app-sms-tool luci-i18n-modem-zh-cn luci-proto-3g luci-proto-mbim luci-proto-modemmanager luci-proto-ncm luci-proto-qmi modemmanager qmi-utils quectel-CM-5G quectel-timesync sms-tool umbim uqmi wwan"
 SMSC_NET="kmod-phy-smsc kmod-usb-net-smsc95xx"
 FAIL=0
 ok()  { printf '  [OK]   %s\n' "$*"; }
