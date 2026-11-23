@@ -1,3 +1,10 @@
-# 上一次成功构建所用的 iStoreOS 上游 commit（由 CI 自动更新）
 branch=istoreos-24.10
-commit=
+commit=45f8da64fc38cf31096659f5e19f3e43a92cc9bd
+feeds:
+  luci b28d7f1da49c3cb4ce931aff3267473fb327a05b
+  packages f1c73e13fc8c78f5f1c74096f25494817494dc47
+  routing 6310a34d521da859ad577ab734afef85304c25d8
+  small 8b7bd991eccfd8e7c048b16da6b755cce029fac8
+  store a97ace34f2da358a015b094d326bba2697697f2e
+  telephony 695f4f4a733dfaf10922d24bf9dbdfd509b8a6d4
+  third 335fa421e0fcd673a78986117981d4dfa3bf57d7
