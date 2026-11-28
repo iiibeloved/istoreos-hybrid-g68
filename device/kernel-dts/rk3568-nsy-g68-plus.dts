@@ -275,8 +275,8 @@
 		poll-interval = <100>;
 		status = "okay";
 		recovery-key {
-			label = "F12";
-			linux,code = <KEY_F12>;
+			label = "reset";
+			linux,code = <KEY_RESTART>;
 			press-threshold-microvolt = <1750>;
 		};
 	};
