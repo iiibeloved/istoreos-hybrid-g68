@@ -33,6 +33,14 @@ KDTS="$ROOT/target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/rk3568-nsy-
 for pat in "adc-keys" "io-channels = <&saradc 0>" "&saradc" "recovery-key" "&xpcs"; do
 	grep -q "$pat" "$KDTS" 2>/dev/null && ok "kernel dts: $pat" || bad "kernel dts 缺 $pat"
 done
+# 复位键系统内恢复出厂：adc-keys 必须映射 KEY_RESTART。
+# KEY_F12 不在 button-hotplug 映射表内，会导致系统运行时按复位键无任何效果。
+grep -q 'linux,code = <KEY_RESTART>' "$KDTS" 2>/dev/null \
+	&& ok "kernel dts: 复位键映射 KEY_RESTART（长按可恢复出厂）" \
+	|| bad "kernel dts 复位键未映射 KEY_RESTART（系统内复位键失效）"
+! grep -q 'linux,code = <KEY_F12>' "$KDTS" 2>/dev/null \
+	&& ok "kernel dts: 无 KEY_F12 残留" \
+	|| bad "kernel dts 仍有 KEY_F12（button-hotplug 不识别）"
 # 上游升级时板级文件必须保持库存版本（防止被上游同名文件覆盖而改变网络/maskrom 行为）
 cmp -s "$DEV/kernel-dts/rk3568-nsy-g68-plus.dts" "$KDTS" \
 	&& ok "kernel dts 与库存逐字节一致" || bad "kernel dts 与库存不一致"
