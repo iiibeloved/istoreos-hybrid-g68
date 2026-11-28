@@ -42,7 +42,7 @@ grep -q 'linux,code = <KEY_RESTART>' "$KDTS" 2>/dev/null \
 	&& ok "kernel dts: 无 KEY_F12 残留" \
 	|| bad "kernel dts 仍有 KEY_F12（button-hotplug 不识别）"
 # 复位键驱动链：SARADC kmod 必须打包，否则 adc-keys 永远 deferred probe、复位键失效。
-grep -q '^CONFIG_PACKAGE_kmod-iio-rockchip-saradc=y' "$DEV/configs/"*.config 2>/dev/null \
+grep -q '^CONFIG_PACKAGE_kmod-iio-rockchip-saradc=y' "$HERE/configs/"*.config 2>/dev/null \
 	&& ok "config: SARADC kmod 已启用（adc-keys 可得 io-channel）" \
 	|| bad "config 缺 kmod-iio-rockchip-saradc（复位键驱动链断裂）"
 # 上游升级时板级文件必须保持库存版本（防止被上游同名文件覆盖而改变网络/maskrom 行为）
